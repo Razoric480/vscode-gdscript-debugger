@@ -2,33 +2,60 @@ import * as vscode from "vscode";
 import cp = require("child_process");
 import net = require("net");
 import * as dp from "./GDScript/DebugParser";
-import { CommandBuilder } from "./Commands/CommandBuilder";
-import { DebugEnterCommand } from "./Commands/DebugEnterCommand";
-import { OutputCommand } from "./Commands/OutputCommand";
+import * as commands from "./Commands/Commands";
 
 export function activate(context: vscode.ExtensionContext) {
     let disposable = vscode.commands.registerCommand(
         "extension.helloWorld",
         () => {
             var server = net.createServer(connection => {
-                let handleDebugEnter = new DebugEnterCommand(parameters => {
-                    vscode.window.showInformationMessage(
-                        `Broke (reason: ${parameters[2]}) ${
-                            parameters[1] ? "Can" : "Cannot"
-                        } continue.`
-                    );
-				});
-				
-				let handleOutput = new OutputCommand((parameters => {
-					let outputMessageCount = parameters[0];
-					console.log(`${parameters.slice(1)}`);
-				}));
+                let handleDebugEnter = new commands.Command(
+                    "debug_enter",
+                    parameters => {
+                        let buffer = createSendCommand("get_stack_dump");
+                        connection.write(buffer, err => {
+                            console.log(err);
+                        });
+                    }
+                );
 
-                let builder = new CommandBuilder();
-				builder.registerCommand(handleDebugEnter);
-				builder.registerCommand(handleOutput);
+                let handleOutput = new commands.Command(
+                    "output",
+                    parameters => {
+                        vscode.window.showInformationMessage(
+                            `Output ${parameters[0]} messages.`
+                        );
+                        console.log("output");
+                    }
+                );
+
+                let handleError = new commands.Command("error", parameters => {
+                    console.log("errors");
+                });
+
+                let handleMessage = new commands.Command(
+                    "message:?",
+                    parameters => {
+                        console.log("message");
+                    }
+                );
+
+                let handleStackDump = new commands.Command(
+                    "stack_dump",
+                    parameters => {
+                        console.log("stackDump");
+                    }
+                );
+
+                let builder = new commands.CommandBuilder();
+                builder.registerCommand(handleDebugEnter);
+                builder.registerCommand(handleOutput);
+                builder.registerCommand(handleError);
+                builder.registerCommand(handleMessage);
+                builder.registerCommand(handleStackDump);
 
                 vscode.window.showInformationMessage("Debugger connected");
+                console.log("Debugger connected");
 
                 connection.on("data", buffer => {
                     let model = dp.getBufferModel(buffer);
@@ -81,6 +108,24 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(disposable);
+}
+
+export function createSendCommand(command: string, parameters?: any[]): Buffer {
+    let commandArray: any[] = [];
+    commandArray.push(command);
+    parameters?.forEach(param => {
+        commandArray.push(param);
+    });
+
+    let buffer = Buffer.alloc(0);
+    let model: dp.BufferModel = {
+        buffer: buffer,
+        offset: 0,
+        len: 0
+    };
+
+    dp.encodeVariant(commandArray, model);
+    return model.buffer;
 }
 
 export function deactivate() {}

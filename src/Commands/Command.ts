@@ -1,47 +1,50 @@
 import * as dp from "../GDScript/DebugParser";
 
-export abstract class Command {
+export class Command {
     private parameters: Array<
         boolean | number | string | {} | [] | undefined
     > = [];
     private callback?: (
         parameters: Array<boolean | number | string | {} | [] | undefined>
     ) => void | undefined;
-    fired = false;
+    name: string;
+    paramCount = -1;
+    private hasFired = false;
 
     constructor(
+        name: string,
         parametersFulfilled?: (parameters: Array<any>) => void | undefined
     ) {
+        this.name = name;
         this.callback = parametersFulfilled;
     }
-
-    abstract name(): string;
-
-    abstract paramCount(): number;
-    
-    abstract paramCountModified(): boolean;
 
     appendParameter(
         parameter: boolean | number | string | {} | [] | undefined
     ) {
-        let paramCount = this.paramCount();
-        if(this.paramCountModified() && this.parameters.length > 0) {
-            paramCount += this.parameters[0] as number;
-        }
-        if (this.parameters.length === paramCount) {
+        if (this.paramCount === -1) {
+            this.paramCount = parameter as number;
             return;
         }
 
         this.parameters.push(parameter);
-        if (this.parameters.length === paramCount) {
-            this.fired = true;
+
+        if (this.parameters.length === this.paramCount) {
+            this.hasFired = true;
             if (this.callback) {
                 this.callback(this.parameters);
             }
         }
     }
 
-    reset() {
-        this.fired = false;
+    checkHasFired() {
+        if (this.hasFired) {
+            this.hasFired = false;
+            this.parameters.length = 0;
+            this.paramCount = 0;
+            return true;
+        }
+
+        return false;
     }
 }

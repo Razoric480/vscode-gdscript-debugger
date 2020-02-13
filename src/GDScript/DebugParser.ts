@@ -1,4 +1,4 @@
-export enum GDScriptTypes {
+enum GDScriptTypes {
     NIL,
     BOOL,
     INT,
@@ -31,7 +31,7 @@ export function getBufferDataSet(model: BufferModel) {
     return output;
 }
 
-export function decodeUInt32(model: BufferModel) {
+function decodeUInt32(model: BufferModel) {
     let u = model.buffer.readUInt32LE(model.offset);
     model.len -= 4;
     model.offset += 4;
@@ -39,7 +39,7 @@ export function decodeUInt32(model: BufferModel) {
     return u;
 }
 
-export function decodeString(model: BufferModel) {
+function decodeString(model: BufferModel) {
     let len = decodeUInt32(model);
     let pad = 0;
     if (len % 4 !== 0) {
@@ -55,7 +55,7 @@ export function decodeString(model: BufferModel) {
     return str;
 }
 
-export function decodeDictionary(model: BufferModel) {
+function decodeDictionary(model: BufferModel) {
     let output = new Map<any, any>();
 
     let count = decodeUInt32(model);
@@ -70,7 +70,7 @@ export function decodeDictionary(model: BufferModel) {
     return output;
 }
 
-export function decodeArray(model: BufferModel) {
+function decodeArray(model: BufferModel) {
     let output: Array<any> = [];
 
     let count = decodeUInt32(model);
@@ -102,5 +102,149 @@ export function decodeVariant(model: BufferModel) {
             return decodeArray(model);
         default:
             return undefined;
+    }
+}
+
+function encodeBool(bool: boolean, model: BufferModel) {
+    encodeUInt32(bool ? 1 : 0, model);
+}
+
+function encodeUInt32(int: number, model: BufferModel) {
+    model.buffer.writeUInt32LE(int, model.offset);
+    model.offset += 4;
+}
+
+function encodeString(str: string, model: BufferModel) {
+    let strlen = str.length;
+    encodeUInt32(strlen, model);
+    model.buffer.write(str, model.offset, "utf8");
+    model.offset += strlen;
+    strlen += 4;
+    while (strlen % 4) {
+        strlen++;
+        model.buffer.writeUInt8(0, model.offset);
+        model.offset++;
+    }
+}
+
+function encodeDictionary(dict: Map<any, any>, model: BufferModel) {
+    let size = dict.size;
+    encodeUInt32(size, model);
+    let keys = Array.from(dict.keys());
+    keys.forEach(key => {
+        let value = dict.get(key);
+        encodeVariant(key, model, true);
+        encodeVariant(value, model, true);
+    });
+}
+
+function encodeArray(arr: any[], model: BufferModel) {
+    let size = arr.length;
+    encodeUInt32(size, model);
+    arr.forEach(e => {
+        encodeVariant(e, model, true);
+    });
+}
+
+function sizeUint32(): number {
+    return 4;
+}
+
+function sizeBool(): number {
+    return sizeUint32();
+}
+
+function sizeString(str: string): number {
+    let size = sizeUint32() + str.length;
+    while (size % 4) {
+        size++;
+    }
+    return size;
+}
+
+function sizeArray(arr: any[]): number {
+    let size = sizeUint32();
+    arr.forEach(e => {
+        size += sizeVariant(e);
+    });
+
+    return size;
+}
+
+function sizeDictionary(dict: Map<any, any>): number {
+    let size = sizeUint32();
+    let keys = Array.from(dict.keys());
+    keys.forEach(key => {
+        let value = dict.get(key);
+        size += sizeVariant(key);
+        size += sizeVariant(value);
+    });
+
+    return size;
+}
+
+function sizeVariant(
+    value: number | boolean | string | Map<any, any> | any[] | undefined
+): number {
+    let size = 4;
+
+    switch (typeof value) {
+        case "number":
+            size += sizeUint32();
+            break;
+        case "boolean":
+            size += sizeBool();
+            break;
+        case "string":
+            size += sizeString(value);
+            break;
+        case "undefined":
+            break;
+        default:
+            if (Array.isArray(value)) {
+                size += sizeArray(value);
+                break;
+            } else {
+                size += sizeDictionary(value);
+                break;
+            }
+    }
+
+    return size;
+}
+
+export function encodeVariant(
+    value: number | boolean | string | Map<any, any> | Array<any> | undefined,
+    model: BufferModel,
+    recursed = false
+) {
+    if (!recursed) {
+        let size = sizeVariant(value);
+        model.buffer = Buffer.alloc(size);
+    }
+
+    switch (typeof value) {
+        case "number":
+            encodeUInt32(GDScriptTypes.INT, model);
+            encodeUInt32(value, model);
+            break;
+        case "boolean":
+            encodeUInt32(GDScriptTypes.BOOL, model);
+            encodeBool(value, model);
+            break;
+        case "string":
+            encodeUInt32(GDScriptTypes.STRING, model);
+            encodeString(value, model);
+            break;
+        case "undefined":
+            break;
+        default:
+            if (Array.isArray(value)) {
+                encodeUInt32(GDScriptTypes.ARRAY, model);
+                encodeArray(value, model);
+            } else {
+                encodeUInt32(GDScriptTypes.DICTIONARY, model);
+                encodeDictionary(value, model);
+            }
     }
 }

@@ -14,7 +14,7 @@
     ],
     "main": "./out/extension.js",
     "contributes": {
-        "commands":[
+        "commands": [
             {
                 "command": "extension.helloWorld",
                 "title": "Hello World"
@@ -28,12 +28,12 @@
                     "gdscript"
                 ]
             }
-		],
-		"breakpoints": [
-			{
-				"language": "gdscript"
-			}
-		],
+        ],
+        "breakpoints": [
+            {
+                "language": "gdscript"
+            }
+        ],
         "languages": [
             {
                 "id": "gdscript",
