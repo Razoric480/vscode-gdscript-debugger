@@ -138,6 +138,7 @@
         "vscode-test": "^1.3.0"
     },
     "dependencies": {
+        "await-notify": "^1.0.1",
         "vscode-debugadapter": "^1.38.0"
     }
 }

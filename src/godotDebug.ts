@@ -16,6 +16,7 @@ import {
 } from "vscode-debugadapter";
 import { DebugProtocol } from "vscode-debugprotocol";
 import { GodotDebugRuntime, GodotBreakpoint } from "./godotDebugRuntime";
+const { Subject } = require("await-notify");
 
 interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
     project: string;
@@ -27,6 +28,7 @@ export class GodotDebugSession extends LoggingDebugSession {
     private static THREAD_ID = 1;
     
     private runtime: GodotDebugRuntime;
+    private configurationDone = new Subject();
 
     public constructor() {
         super();
@@ -41,22 +43,51 @@ export class GodotDebugSession extends LoggingDebugSession {
     protected initializeRequest(
         response: DebugProtocol.InitializeResponse,
         args: DebugProtocol.InitializeRequestArguments
-    ): void {}
+    ): void {
+        response.body = response.body || {};
+        
+        response.body.supportsConfigurationDoneRequest = true;
+        response.body.supportsEvaluateForHovers = true;
+        response.body.supportsBreakpointLocationsRequest = true;
+        
+        this.sendResponse(response);
+        
+        this.sendEvent(new InitializedEvent());
+    }
 
     protected configurationDoneRequest(
         response: DebugProtocol.ConfigurationDoneResponse,
         args: DebugProtocol.ConfigurationDoneArguments
-    ): void {}
+    ): void {
+        super.configurationDoneRequest(response, args);
+        
+        this.configurationDone.notify();
+    }
 
     protected async launchRequest(
         response: DebugProtocol.LaunchResponse,
         args: LaunchRequestArguments
-    ) {}
+    ) {
+        await this.configurationDone.wait(1000);
+        this.runtime.start(args.project, args.address, args.port);
+        this.sendResponse(response);
+    }
 
     protected setBreakPointsRequest(
         response: DebugProtocol.SetBreakpointsResponse,
         args: DebugProtocol.SetBreakpointsArguments
-    ): void {}
+    ): void {
+        const path = args.source.path as string;
+        const clientLines = args.lines || [];
+        
+        this.runtime.clearBreakpoints(path);
+        
+        const actualBreakPoints = clientLines.map(l => {
+            let {file, line, id} = this.runtime.setBreakPoint(path, this.convertClientLineToDebugger(l));
+            const bp = new Breakpoint(verified, this.convertDebuggerLineToClient(line));
+            
+        });
+    }
 
     protected breakpointLocationsRequest(
         response: DebugProtocol.BreakpointLocationsResponse,
