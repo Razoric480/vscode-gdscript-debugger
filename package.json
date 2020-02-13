@@ -1,8 +1,28 @@
 {
     "name": "godot-debugger",
     "displayName": "Godot Debugger",
-    "description": "Provides a debugging adapter for Godot",
-    "version": "0.0.1",
+    "version": "1.0.0",
+    "publisher": "Razoric",
+    "description": "Provides a debugging adapter for Godot's remote debugger",
+    "author": {
+        "name": "Razoric",
+        "email": "razoric480@gmail.com",
+        "url": "https://razori.ca"
+    },
+    "license": "MIT",
+    "keywords": [
+        "gdscript",
+        "godot",
+        "debug"
+    ],
+    "icon": "icon.png",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Razoric480/vscode-gdscript-debugger.git"
+    },
+    "bugs": {
+        "url": "https://github.com/Razoric480/vscode-gdscript-debugger/issues"
+    },
     "engines": {
         "vscode": "^1.42.0"
     },
@@ -10,22 +30,70 @@
         "Debuggers"
     ],
     "activationEvents": [
-        "onCommand:extension.helloWorld"
+        "onDebug",
+        "onCommand:extension.debugGodot"
     ],
     "main": "./out/extension.js",
     "contributes": {
         "commands": [
             {
-                "command": "extension.helloWorld",
-                "title": "Hello World"
+                "command": "extension.debugGodot",
+                "title": "Debug Godot"
             }
         ],
         "debuggers": [
             {
-                "type": "godot-debugger",
-                "label": "Godot Debugger",
-                "languages": [
-                    "gdscript"
+                "type": "godot",
+                "label": "Godot Debug",
+                "program": "./out/debugAdapter.js",
+                "runtime": "node",
+                "configurationAttributes": {
+                    "launch": {
+                        "required": [
+                            "project",
+                            "port",
+                            "address"
+                        ],
+                        "properties": {
+                            "project": {
+                                "type": "string",
+                                "description": "Absolute path to a directory with a project.godot file.",
+                                "default": "${workspaceFolder}"
+                            },
+                            "port": {
+                                "type": "number",
+                                "description": "The port number for the Godot remote debugger to use.",
+                                "default": 6007
+                            },
+                            "address": {
+                                "type": "string",
+                                "description": "The IP address for the Godot remote debugger to use.",
+                                "default": "127.0.0.1"
+                            }
+                        }
+                    }
+                },
+                "initialConfigurations": [
+                    {
+                        "type": "godot",
+                        "request": "launch",
+                        "project": "${workspaceFolder}",
+                        "port": 6007,
+                        "address": "127.0.0.1"
+                    }
+                ],
+                "configurationSnippets": [
+                    {
+                        "label": "Godot Debug: Launch",
+                        "description": "A new configuration for debugging a Godot project.",
+                        "body": {
+                            "type": "godot",
+                            "request": "launch",
+                            "project": "${workspaceFolder}",
+                            "port": 6007,
+                            "address": "127.0.0.1"
+                        }
+                    }
                 ]
             }
         ],
@@ -68,5 +136,8 @@
         "mocha": "^7.0.1",
         "typescript": "^3.7.5",
         "vscode-test": "^1.3.0"
+    },
+    "dependencies": {
+        "vscode-debugadapter": "^1.38.0"
     }
 }

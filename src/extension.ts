@@ -1,21 +1,29 @@
 import * as vscode from "vscode";
 import cp = require("child_process");
 import net = require("net");
-import * as dp from "./GDScript/DebugParser";
+import { VariantParser } from "./VariantParser";
 import * as commands from "./Commands/Commands";
 
 export function activate(context: vscode.ExtensionContext) {
     let disposable = vscode.commands.registerCommand(
-        "extension.helloWorld",
+        "extension.debugGodot",
         () => {
+            let channel = vscode.window.createOutputChannel("Godot");
+            channel.show();
+
             var server = net.createServer(connection => {
                 let handleDebugEnter = new commands.Command(
                     "debug_enter",
                     parameters => {
-                        let buffer = createSendCommand("get_stack_dump");
-                        connection.write(buffer, err => {
-                            console.log(err);
-                        });
+                        let buffer = builder.createBufferedCommand(
+                            "get_stack_dump",
+                            parser
+                        );
+                        let test = connection.write(buffer);
+
+                        channel.appendLine(
+                            test ? "Output fully" : "Not output fully"
+                        );
                     }
                 );
 
@@ -29,9 +37,12 @@ export function activate(context: vscode.ExtensionContext) {
                     }
                 );
 
-                let handleError = new commands.Command("error", parameters => {
-                    console.log("errors");
-                });
+                let handleError = new commands.Command(
+                    "error",
+                    parameters => {
+                        console.log("errors");
+                    }
+                );
 
                 let handleMessage = new commands.Command(
                     "message:?",
@@ -43,7 +54,7 @@ export function activate(context: vscode.ExtensionContext) {
                 let handleStackDump = new commands.Command(
                     "stack_dump",
                     parameters => {
-                        console.log("stackDump");
+                        channel.appendLine("Stack dump?");
                     }
                 );
 
@@ -54,47 +65,44 @@ export function activate(context: vscode.ExtensionContext) {
                 builder.registerCommand(handleMessage);
                 builder.registerCommand(handleStackDump);
 
-                vscode.window.showInformationMessage("Debugger connected");
-                console.log("Debugger connected");
+                let parser = new VariantParser();
 
                 connection.on("data", buffer => {
-                    let model = dp.getBufferModel(buffer);
-                    let dataset = dp.getBufferDataSet(model);
-                    builder.parseData(dataset);
+                    let len = buffer.byteLength;
+                    let offset = 0;
+                    do {
+                        let dataset = parser.getBufferDataSet(buffer, offset);
+                        offset += dataset[0] as number;
+                        len -= offset;
+                        builder.parseData(dataset.slice(1));
+                    } while (len > 0);
                 });
 
                 connection.on("close", hadError => {
-                    console.log(
-                        "Connection closed" + (hadError ? " with errors." : "")
+                    channel.appendLine(
+                        `Connection closed ${hadError ? " with errors." : ""}`
                     );
                 });
 
                 connection.on("connect", () => {
-                    console.log("Connection established");
+                    channel.appendLine(`Debugger connected`);
                 });
 
                 connection.on("drain", () => {
-                    console.log("Drained");
+                    channel.appendLine(`Drained`);
                 });
 
                 connection.on("end", () => {
-                    console.log("Connection ended");
+                    channel.appendLine(`Connection ended`);
                 });
 
                 connection.on("error", error => {
-                    console.log("Error: " + error);
+                    channel.appendLine(`Error: ${error}`);
                 });
 
                 connection.on("lookup", (error, address, family, host) => {
-                    console.log(
-                        "Lookup: " +
-                            error +
-                            ", " +
-                            address +
-                            ", " +
-                            family +
-                            ", " +
-                            host
+                    channel.appendLine(
+                        `Lookup: ${error}, "${address}, ${family}, ${host}`
                     );
                 });
             });
@@ -108,24 +116,6 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(disposable);
-}
-
-export function createSendCommand(command: string, parameters?: any[]): Buffer {
-    let commandArray: any[] = [];
-    commandArray.push(command);
-    parameters?.forEach(param => {
-        commandArray.push(param);
-    });
-
-    let buffer = Buffer.alloc(0);
-    let model: dp.BufferModel = {
-        buffer: buffer,
-        offset: 0,
-        len: 0
-    };
-
-    dp.encodeVariant(commandArray, model);
-    return model.buffer;
 }
 
 export function deactivate() {}
