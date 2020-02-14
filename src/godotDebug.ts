@@ -15,7 +15,11 @@ import {
     Breakpoint
 } from "vscode-debugadapter";
 import { DebugProtocol } from "vscode-debugprotocol";
-import { GodotDebugRuntime, GodotBreakpoint } from "./godotDebugRuntime";
+import {
+    GodotDebugRuntime,
+    GodotBreakpoint,
+    GodotStackframe
+} from "./godotDebugRuntime";
 const { Subject } = require("await-notify");
 import * as vscode from "vscode";
 import fs = require("fs");
@@ -31,7 +35,7 @@ export class GodotDebugSession extends LoggingDebugSession {
 
     private runtime: GodotDebugRuntime;
     private configurationDone = new Subject();
-    private lastBP: GodotBreakpoint | undefined;
+    private lastFrames: GodotStackframe[] | undefined;
 
     public constructor() {
         super();
@@ -41,8 +45,8 @@ export class GodotDebugSession extends LoggingDebugSession {
 
         this.runtime = new GodotDebugRuntime();
 
-        this.runtime.on("stopOnBreakpoint", (bp) => {
-            this.lastBP = bp;
+        this.runtime.on("stopOnBreakpoint", frames => {
+            this.lastFrames = frames;
             this.sendEvent(
                 new StoppedEvent("breakpoint", GodotDebugSession.THREAD_ID)
             );
@@ -56,6 +60,10 @@ export class GodotDebugSession extends LoggingDebugSession {
                 })
             );
         });
+    }
+
+    finish() {
+        this.runtime.finish();
     }
 
     protected initializeRequest(
@@ -131,18 +139,25 @@ export class GodotDebugSession extends LoggingDebugSession {
         response: DebugProtocol.StackTraceResponse,
         args: DebugProtocol.StackTraceArguments
     ): void {
-        if(this.lastBP) {
-            let stackFrame : DebugProtocol.StackFrame = {
-                id: 0,
-                name: "trace",
-                line: this.lastBP.line+1,
-                column: 1,
-                source: new Source(this.lastBP.file.slice(this.lastBP.file.lastIndexOf("/")+1), this.lastBP.file)
-            };
+        if (this.lastFrames) {
             response.body = {
-                stackFrames: [stackFrame],
-                totalFrames: 1
-            }
+                totalFrames: this.lastFrames.length,
+                stackFrames: this.lastFrames.map(sf => {
+                    return {
+                        id: sf.id,
+                        name: sf.function,
+                        line: sf.line,
+                        column: 1,
+                        source: new Source(
+                            sf.file,
+                            `${this.runtime.getProject()}/${sf.file.replace(
+                                "res://",
+                                ""
+                            )}`
+                        )
+                    };
+                })
+            };
         }
         this.sendResponse(response);
     }
@@ -150,7 +165,9 @@ export class GodotDebugSession extends LoggingDebugSession {
     protected scopesRequest(
         response: DebugProtocol.ScopesResponse,
         args: DebugProtocol.ScopesArguments
-    ): void {}
+    ): void {
+        
+    }
 
     protected async variablesRequest(
         response: DebugProtocol.VariablesResponse,

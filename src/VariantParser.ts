@@ -1,57 +1,127 @@
+import { X_OK } from "constants";
+import { Z_ASCII } from "zlib";
+
 enum GDScriptTypes {
     NIL,
+
+    // atomic types
     BOOL,
     INT,
     REAL,
     STRING,
-    DICTIONARY = 18,
-    ARRAY
+
+    // math types
+
+    VECTOR2, // 5
+    RECT2,
+    VECTOR3,
+    TRANSFORM2D,
+    PLANE,
+    QUAT, // 10
+    AABB,
+    BASIS,
+    TRANSFORM,
+
+    // misc types
+    COLOR,
+    NODE_PATH, // 15
+    _RID,
+    OBJECT,
+    DICTIONARY,
+    ARRAY,
+
+    // arrays
+    POOL_BYTE_ARRAY, // 20
+    POOL_INT_ARRAY,
+    POOL_REAL_ARRAY,
+    POOL_STRING_ARRAY,
+    POOL_VECTOR2_ARRAY,
+    POOL_VECTOR3_ARRAY, // 25
+    POOL_COLOR_ARRAY,
+
+    VARIANT_MAX
 }
 
 interface BufferModel {
+    // #region Properties (3)
+
     buffer: Buffer;
-    offset: number;
     len: number;
+    offset: number;
+
+    // #endregion Properties (3)
 }
 
 export class VariantParser {
-    getBufferDataSet(buffer: Buffer, offset: number) {
-        let len = buffer.readUInt32LE(offset);
-        let model: BufferModel = {
-            buffer: buffer,
-            offset: offset+4,
-            len: len
-        };
+    // #region Public Methods (3)
 
-        let output = [];
-        output.push(len+4);
-        do {
-            let value = this.decodeVariant(model);
-            output.push(value);
-        } while (model.len > 0);
-
-        return output;
-    }
-
-    decodeVariant(model: BufferModel) {
+    public decodeVariant(model: BufferModel) {
         let type = this.decodeUInt32(model) & 0xff;
         switch (type) {
             case GDScriptTypes.BOOL:
                 return this.decodeUInt32(model) !== 0;
             case GDScriptTypes.INT:
-                return this.decodeUInt32(model);
+                if (type & (1 << 16)) {
+                    return this.decodeInt64(model);
+                } else {
+                    return this.decodeInt32(model);
+                }
+            case GDScriptTypes.REAL:
+                return this.decodeFloat(model);
             case GDScriptTypes.STRING:
                 return this.decodeString(model);
+            case GDScriptTypes.VECTOR2:
+                return this.decodeVector2(model);
+            case GDScriptTypes.RECT2:
+                return this.decodeRect2(model);
+            case GDScriptTypes.VECTOR3:
+                return this.decodeVector3(model);
+            case GDScriptTypes.TRANSFORM2D:
+                return this.decodeTransform2(model);
+            case GDScriptTypes.PLANE:
+                return this.decodePlane(model);
+            case GDScriptTypes.QUAT:
+                return this.decodeQuat(model);
+            case GDScriptTypes.AABB:
+                return this.decodeAABB(model);
+            case GDScriptTypes.BASIS:
+                return this.decodeBasis(model);
+            case GDScriptTypes.TRANSFORM:
+                return this.decodeTransform(model);
+            case GDScriptTypes.COLOR:
+                return this.decodeColor(model);
+            case GDScriptTypes.NODE_PATH:
+                return this.decodeNodePath(model);
+            case GDScriptTypes.OBJECT:
+                if (type & (1 << 16)) {
+                    return this.decodeObject(model);
+                } else {
+                    return this.decodeObjectId(model);
+                }
             case GDScriptTypes.DICTIONARY:
                 return this.decodeDictionary(model);
             case GDScriptTypes.ARRAY:
                 return this.decodeArray(model);
+            case GDScriptTypes.POOL_BYTE_ARRAY:
+                return this.decodePoolByteArray(model);
+            case GDScriptTypes.POOL_INT_ARRAY:
+                return this.decodePoolIntArray(model);
+            case GDScriptTypes.POOL_REAL_ARRAY:
+                return this.decodePoolFloatArray(model);
+            case GDScriptTypes.POOL_STRING_ARRAY:
+                return this.decodePoolStringArray(model);
+            case GDScriptTypes.POOL_VECTOR2_ARRAY:
+                return this.decodePoolVector2Array(model);
+            case GDScriptTypes.POOL_VECTOR3_ARRAY:
+                return this.decodePoolVector3Array(model);
+            case GDScriptTypes.POOL_COLOR_ARRAY:
+                return this.decodePoolColorArray(model);
             default:
                 return undefined;
         }
     }
 
-    encodeVariant(
+    public encodeVariant(
         value:
             | number
             | boolean
@@ -100,12 +170,227 @@ export class VariantParser {
         return model.buffer;
     }
 
-    private decodeUInt32(model: BufferModel) {
-        let u = model.buffer.readUInt32LE(model.offset);
-        model.len -= 4;
-        model.offset += 4;
+    public getBufferDataSet(buffer: Buffer, offset: number) {
+        let len = buffer.readUInt32LE(offset);
+        let model: BufferModel = {
+            buffer: buffer,
+            offset: offset + 4,
+            len: len
+        };
 
-        return u;
+        let output = [];
+        output.push(len + 4);
+        do {
+            let value = this.decodeVariant(model);
+            output.push(value);
+        } while (model.len > 0);
+
+        return output;
+    }
+
+    // #endregion Public Methods (3)
+
+    // #region Private Methods (37)
+
+    private decodeAABB(model: BufferModel) {
+        let px = this.decodeFloat(model);
+        let py = this.decodeFloat(model);
+        let pz = this.decodeFloat(model);
+        let sx = this.decodeFloat(model);
+        let sy = this.decodeFloat(model);
+        let sz = this.decodeFloat(model);
+
+        return {
+            position: { x: px, y: py, z: pz },
+            size: { x: sx, y: sy, z: sz }
+        };
+    }
+
+    private decodeArray(model: BufferModel) {
+        let output: Array<any> = [];
+
+        let count = this.decodeUInt32(model);
+
+        for (let i = 0; i < count; i++) {
+            let value = this.decodeVariant(model);
+            output.push(value);
+        }
+
+        return output;
+    }
+
+    private decodeBasis(model: BufferModel) {
+        let x = this.decodeVector3(model);
+        let y = this.decodeVector3(model);
+        let z = this.decodeVector3(model);
+
+        return { x: x, y: y, z: z };
+    }
+
+    private decodeColor(model: BufferModel) {
+        let r = this.decodeFloat(model);
+        let g = this.decodeFloat(model);
+        let b = this.decodeFloat(model);
+        let a = this.decodeFloat(model);
+
+        return { r: r, g: g, b: b, a: a };
+    }
+
+    private decodeDictionary(model: BufferModel) {
+        let output = new Map<any, any>();
+
+        let count = this.decodeUInt32(model);
+        for (let i = 0; i < count; i++) {
+            let key = this.decodeVariant(model);
+            let value = this.decodeVariant(model);
+            output.set(key, value);
+        }
+
+        return output;
+    }
+
+    private decodeFloat(model: BufferModel) {
+        let f = model.buffer.readDoubleLE(model.offset);
+        model.len -= 8;
+        model.offset += 8;
+
+        return f;
+    }
+
+    private decodeNodePath(model: BufferModel) {
+        let nameCount = this.decodeUInt32(model) & 0x80000000;
+        let subnameCount = this.decodeUInt32(model);
+        let isAbsolute = (this.decodeUInt32(model) & 1) === 1;
+
+        let total = nameCount + subnameCount;
+        let names: string[] = [];
+        let subnames: string[] = [];
+        for (let i = 0; i < total; i++) {
+            let str = this.decodeString(model);
+            if (i < nameCount) {
+                names.push(str);
+            } else {
+                subnames.push(str);
+            }
+        }
+
+        return `${names.join("/")}:${subnames.join(":")}`;
+    }
+
+    private decodeObject(model: BufferModel) {
+        let className = this.decodeString(model);
+        let propCount = this.decodeUInt32(model);
+        let props: { name: string; value: any }[] = [];
+        for (let i = 0; i < propCount; i++) {
+            let name = this.decodeString(model);
+            let value = this.decodeVariant(model);
+            props.push({ name: name, value: value });
+        }
+
+        return { class: className, properties: props };
+    }
+
+    private decodeObjectId(model: BufferModel) {
+        return this.decodeUInt64(model);
+    }
+
+    private decodePlane(model: BufferModel) {
+        let x = this.decodeFloat(model);
+        let y = this.decodeFloat(model);
+        let z = this.decodeFloat(model);
+        let d = this.decodeFloat(model);
+
+        return { x: x, y: y, z: z, d: d };
+    }
+
+    private decodePoolByteArray(model: BufferModel) {
+        let count = this.decodeUInt32(model);
+        let output: number[] = [];
+        for (let i = 0; i < count; i++) {
+            output.push(model.buffer.readUInt8(model.offset));
+            model.offset++;
+            model.len--;
+        }
+
+        return output;
+    }
+
+    private decodePoolColorArray(model: BufferModel) {
+        let count = this.decodeUInt32(model);
+        let output: { r: number; g: number; b: number; a: number }[] = [];
+        for (let i = 0; i < count; i++) {
+            output.push(this.decodeColor(model));
+        }
+
+        return output;
+    }
+
+    private decodePoolFloatArray(model: BufferModel) {
+        let count = this.decodeUInt32(model);
+        let output: number[] = [];
+        for (let i = 0; i < count; i++) {
+            output.push(this.decodeFloat(model));
+        }
+
+        return output;
+    }
+
+    private decodePoolIntArray(model: BufferModel) {
+        let count = this.decodeUInt32(model);
+        let output: number[] = [];
+        for (let i = 0; i < count; i++) {
+            output.push(this.decodeInt32(model));
+        }
+
+        return output;
+    }
+
+    private decodePoolStringArray(model: BufferModel) {
+        let count = this.decodeUInt32(model);
+        let output: string[] = [];
+        for (let i = 0; i < count; i++) {
+            output.push(this.decodeString(model));
+        }
+
+        return output;
+    }
+
+    private decodePoolVector2Array(model: BufferModel) {
+        let count = this.decodeUInt32(model);
+        let output: { x: number; y: number }[] = [];
+        for (let i = 0; i < count; i++) {
+            output.push(this.decodeVector2(model));
+        }
+
+        return output;
+    }
+
+    private decodePoolVector3Array(model: BufferModel) {
+        let count = this.decodeUInt32(model);
+        let output: { x: number; y: number; z: number }[] = [];
+        for (let i = 0; i < count; i++) {
+            output.push(this.decodeVector3(model));
+        }
+
+        return output;
+    }
+
+    private decodeQuat(model: BufferModel) {
+        let x = this.decodeFloat(model);
+        let y = this.decodeFloat(model);
+        let z = this.decodeFloat(model);
+        let w = this.decodeFloat(model);
+
+        return { x: x, y: y, z: z, w: w };
+    }
+
+    private decodeRect2(model: BufferModel) {
+        let x = this.decodeFloat(model);
+        let y = this.decodeFloat(model);
+        let sizex = this.decodeFloat(model);
+        let sizey = this.decodeFloat(model);
+
+        return { position: { x: x, y: y }, size: { x: sizex, y: sizey } };
     }
 
     private decodeString(model: BufferModel) {
@@ -128,43 +413,89 @@ export class VariantParser {
         return str;
     }
 
-    private decodeDictionary(model: BufferModel) {
-        let output = new Map<any, any>();
+    private decodeTransform(model: BufferModel) {
+        let b = this.decodeBasis(model);
+        let o = this.decodeVector3(model);
 
-        let count = this.decodeUInt32(model);
-        for (let i = 0; i < count; i++) {
-            let key = this.decodeVariant(model);
-            let value = this.decodeVariant(model);
-            if (key) {
-                output.set(key, value);
-            }
-        }
-
-        return output;
+        return { basis: b, origin: o };
     }
 
-    private decodeArray(model: BufferModel) {
-        let output: Array<any> = [];
+    private decodeTransform2(model: BufferModel) {
+        let origin = this.decodeVector2(model);
+        let x = this.decodeVector2(model);
+        let y = this.decodeVector2(model);
 
-        let count = this.decodeUInt32(model);
+        return { origin: origin, x: x, y: y };
+    }
 
-        for (let i = 0; i < count; i++) {
-            let value = this.decodeVariant(model);
-            if (value) {
-                output.push(value);
-            }
-        }
+    private decodeUInt32(model: BufferModel) {
+        let u = model.buffer.readUInt32LE(model.offset);
+        model.len -= 4;
+        model.offset += 4;
 
-        return output;
+        return u;
+    }
+
+    private decodeUInt64(model: BufferModel) {
+        let u = model.buffer.readBigUInt64LE(model.offset);
+        model.len -= 8;
+        model.offset += 8;
+
+        return u;
+    }
+
+    private decodeInt32(model: BufferModel) {
+        let u = model.buffer.readInt32LE(model.offset);
+        model.len -= 4;
+        model.offset += 4;
+
+        return u;
+    }
+
+    private decodeInt64(model: BufferModel) {
+        let u = model.buffer.readBigInt64LE(model.offset);
+        model.len -= 8;
+        model.offset += 8;
+
+        return u;
+    }
+
+    private decodeVector2(model: BufferModel) {
+        let x = this.decodeFloat(model);
+        let y = this.decodeFloat(model);
+
+        return { x: x, y: y };
+    }
+
+    private decodeVector3(model: BufferModel) {
+        let x = this.decodeFloat(model);
+        let y = this.decodeFloat(model);
+        let z = this.decodeFloat(model);
+
+        return { x: x, y: y, z: z };
+    }
+
+    private encodeArray(arr: any[], model: BufferModel) {
+        let size = arr.length;
+        this.encodeUInt32(size, model);
+        arr.forEach(e => {
+            this.encodeVariant(e, model);
+        });
     }
 
     private encodeBool(bool: boolean, model: BufferModel) {
         this.encodeUInt32(bool ? 1 : 0, model);
     }
 
-    private encodeUInt32(int: number, model: BufferModel) {
-        model.buffer.writeUInt32LE(int, model.offset);
-        model.offset += 4;
+    private encodeDictionary(dict: Map<any, any>, model: BufferModel) {
+        let size = dict.size;
+        this.encodeUInt32(size, model);
+        let keys = Array.from(dict.keys());
+        keys.forEach(key => {
+            let value = dict.get(key);
+            this.encodeVariant(key, model);
+            this.encodeVariant(value, model);
+        });
     }
 
     private encodeString(str: string, model: BufferModel) {
@@ -180,39 +511,9 @@ export class VariantParser {
         }
     }
 
-    private encodeDictionary(dict: Map<any, any>, model: BufferModel) {
-        let size = dict.size;
-        this.encodeUInt32(size, model);
-        let keys = Array.from(dict.keys());
-        keys.forEach(key => {
-            let value = dict.get(key);
-            this.encodeVariant(key, model);
-            this.encodeVariant(value, model);
-        });
-    }
-
-    private encodeArray(arr: any[], model: BufferModel) {
-        let size = arr.length;
-        this.encodeUInt32(size, model);
-        arr.forEach(e => {
-            this.encodeVariant(e, model);
-        });
-    }
-
-    private sizeUint32(): number {
-        return 4;
-    }
-
-    private sizeBool(): number {
-        return this.sizeUint32();
-    }
-
-    private sizeString(str: string): number {
-        let size = this.sizeUint32() + str.length;
-        while (size % 4) {
-            size++;
-        }
-        return size;
+    private encodeUInt32(int: number, model: BufferModel) {
+        model.buffer.writeUInt32LE(int, model.offset);
+        model.offset += 4;
     }
 
     private sizeArray(arr: any[]): number {
@@ -222,6 +523,10 @@ export class VariantParser {
         });
 
         return size;
+    }
+
+    private sizeBool(): number {
+        return this.sizeUint32();
     }
 
     private sizeDictionary(dict: Map<any, any>): number {
@@ -234,6 +539,18 @@ export class VariantParser {
         });
 
         return size;
+    }
+
+    private sizeString(str: string): number {
+        let size = this.sizeUint32() + str.length;
+        while (size % 4) {
+            size++;
+        }
+        return size;
+    }
+
+    private sizeUint32(): number {
+        return 4;
     }
 
     private sizeVariant(
@@ -265,4 +582,6 @@ export class VariantParser {
 
         return size;
     }
+
+    // #endregion Private Methods (37)
 }

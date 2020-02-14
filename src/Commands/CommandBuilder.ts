@@ -39,7 +39,6 @@ export class CommandBuilder {
     ): Buffer {
         let commandArray: any[] = [command];
         if (parameters) {
-            commandArray.push(parameters.length);
             parameters?.forEach(param => {
                 commandArray.push(param);
             });
