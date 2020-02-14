@@ -31,6 +31,7 @@ export class GodotDebugSession extends LoggingDebugSession {
 
     private runtime: GodotDebugRuntime;
     private configurationDone = new Subject();
+    private lastBP: GodotBreakpoint | undefined;
 
     public constructor() {
         super();
@@ -40,7 +41,8 @@ export class GodotDebugSession extends LoggingDebugSession {
 
         this.runtime = new GodotDebugRuntime();
 
-        this.runtime.on("stopOnBreakpoint", () => {
+        this.runtime.on("stopOnBreakpoint", (bp) => {
+            this.lastBP = bp;
             this.sendEvent(
                 new StoppedEvent("breakpoint", GodotDebugSession.THREAD_ID)
             );
@@ -128,7 +130,22 @@ export class GodotDebugSession extends LoggingDebugSession {
     protected stackTraceRequest(
         response: DebugProtocol.StackTraceResponse,
         args: DebugProtocol.StackTraceArguments
-    ): void {}
+    ): void {
+        if(this.lastBP) {
+            let stackFrame : DebugProtocol.StackFrame = {
+                id: 0,
+                name: "trace",
+                line: this.lastBP.line+1,
+                column: 1,
+                source: new Source(this.lastBP.file.slice(this.lastBP.file.lastIndexOf("/")+1), this.lastBP.file)
+            };
+            response.body = {
+                stackFrames: [stackFrame],
+                totalFrames: 1
+            }
+        }
+        this.sendResponse(response);
+    }
 
     protected scopesRequest(
         response: DebugProtocol.ScopesResponse,
