@@ -17,6 +17,8 @@ import {
 import { DebugProtocol } from "vscode-debugprotocol";
 import { GodotDebugRuntime, GodotBreakpoint } from "./godotDebugRuntime";
 const { Subject } = require("await-notify");
+import * as vscode from "vscode";
+import fs = require("fs");
 
 interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
     project: string;
@@ -26,17 +28,31 @@ interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
 
 export class GodotDebugSession extends LoggingDebugSession {
     private static THREAD_ID = 1;
-    
+
     private runtime: GodotDebugRuntime;
     private configurationDone = new Subject();
 
     public constructor() {
         super();
-        
+
+        this.setDebuggerLinesStartAt1(false);
+        this.setDebuggerColumnsStartAt1(false);
+
         this.runtime = new GodotDebugRuntime();
-        
-        this.runtime.on('stopOnStep', () => {
-            this.sendEvent(new StoppedEvent('step', GodotDebugSession.THREAD_ID));
+
+        this.runtime.on("stopOnBreakpoint", () => {
+            this.sendEvent(
+                new StoppedEvent("breakpoint", GodotDebugSession.THREAD_ID)
+            );
+        });
+
+        this.runtime.on("breakpointValidated", (bp: GodotBreakpoint) => {
+            this.sendEvent(
+                new BreakpointEvent("changed", <DebugProtocol.Breakpoint>{
+                    verified: bp.verified,
+                    id: bp.id
+                })
+            );
         });
     }
 
@@ -45,13 +61,13 @@ export class GodotDebugSession extends LoggingDebugSession {
         args: DebugProtocol.InitializeRequestArguments
     ): void {
         response.body = response.body || {};
-        
+
         response.body.supportsConfigurationDoneRequest = true;
         response.body.supportsEvaluateForHovers = true;
         response.body.supportsBreakpointLocationsRequest = true;
-        
+
         this.sendResponse(response);
-        
+
         this.sendEvent(new InitializedEvent());
     }
 
@@ -60,7 +76,7 @@ export class GodotDebugSession extends LoggingDebugSession {
         args: DebugProtocol.ConfigurationDoneArguments
     ): void {
         super.configurationDoneRequest(response, args);
-        
+
         this.configurationDone.notify();
     }
 
@@ -79,14 +95,21 @@ export class GodotDebugSession extends LoggingDebugSession {
     ): void {
         const path = args.source.path as string;
         const clientLines = args.lines || [];
-        
-        this.runtime.clearBreakpoints(path);
-        
-        const actualBreakPoints = clientLines.map(l => {
-            let {file, line, id} = this.runtime.setBreakPoint(path, this.convertClientLineToDebugger(l));
-            const bp = new Breakpoint(verified, this.convertDebuggerLineToClient(line));
-            
-        });
+
+        if (fs.existsSync(path)) {
+            this.runtime.clearBreakpoints(path);
+
+            const actualBreakPoints = clientLines.map(l => {
+                let { verified, file, line, id } = this.runtime.setBreakPoint(
+                    path,
+                    this.convertClientLineToDebugger(l)
+                );
+                const bp = new Breakpoint(
+                    verified,
+                    this.convertDebuggerLineToClient(line)
+                );
+            });
+        }
     }
 
     protected breakpointLocationsRequest(

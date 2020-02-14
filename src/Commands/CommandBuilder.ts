@@ -21,7 +21,7 @@ export class CommandBuilder {
                 if (command) {
                     this.currentCommand = command;
                 } else {
-                    console.log("Unrecognized command: " + command);
+
                 }
             }
         }
