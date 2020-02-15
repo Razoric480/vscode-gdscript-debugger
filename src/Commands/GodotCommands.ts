@@ -1,7 +1,6 @@
 import { CommandBuilder } from "./CommandBuilder";
 import { VariantParser } from "../VariantParser";
 import net = require("net");
-import path = require("path");
 
 export class GodotCommands {
     // #region Properties (5)
@@ -43,16 +42,6 @@ export class GodotCommands {
         this.addAndSend(buffer);
     }
 
-    public sendStackFrameVarsCommand(level: number) {
-        let buffer = this.builder.createBufferedCommand(
-            "get_stack_frame_vars",
-            this.parser,
-            [level]
-        );
-
-        this.addAndSend(buffer);
-    }
-
     public sendInspectObjectCommand(objectId: number) {
         let buffer = this.builder.createBufferedCommand(
             "inspect_object",
@@ -90,6 +79,16 @@ export class GodotCommands {
         let buffer = this.builder.createBufferedCommand(
             "get_stack_dump",
             this.parser
+        );
+
+        this.addAndSend(buffer);
+    }
+
+    public sendStackFrameVarsCommand(level: number) {
+        let buffer = this.builder.createBufferedCommand(
+            "get_stack_frame_vars",
+            this.parser,
+            [level]
         );
 
         this.addAndSend(buffer);

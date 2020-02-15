@@ -6,8 +6,7 @@ import {
     BreakpointEvent,
     Thread,
     Source,
-    Breakpoint,
-    Variable
+    Breakpoint
 } from "vscode-debugadapter";
 import { DebugProtocol } from "vscode-debugprotocol";
 import {
@@ -20,18 +19,12 @@ import fs = require("fs");
 import { VariableScope } from "./VariableScope";
 
 interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
-    // #region Properties (3)
-
     address: string;
     port: number;
     project: string;
-
-    // #endregion Properties (3)
 }
 
 export class GodotDebugSession extends LoggingDebugSession {
-    // #region Properties (6)
-
     private static THREAD_ID = 1;
 
     private configurationDone = new Subject();
@@ -39,10 +32,6 @@ export class GodotDebugSession extends LoggingDebugSession {
     private runtime: GodotDebugRuntime;
     private scopeId = 1;
     private scopes = new Map<string, VariableScope[]>();
-
-    // #endregion Properties (6)
-
-    // #region Constructors (1)
 
     public constructor() {
         super();
@@ -72,10 +61,6 @@ export class GodotDebugSession extends LoggingDebugSession {
             this.sendEvent(new TerminatedEvent(false));
         });
     }
-
-    // #endregion Constructors (1)
-
-    // #region Protected Methods (16)
 
     protected breakpointLocationsRequest(
         response: DebugProtocol.BreakpointLocationsResponse,
@@ -468,6 +453,59 @@ export class GodotDebugSession extends LoggingDebugSession {
         }
     }
 
+    private drillScope(scope: VariableScope, variable: any) {
+        let id = scope.getIdFor(variable.name);
+        if (id === -1) {
+            id = this.scopeId++;
+        }
+        scope.setVariable(variable.name, variable.value, id);
+        if (Array.isArray(variable.value)) {
+            for (let i = 0; i < variable.value.length; i++) {
+                let subVars = scope.getSubVariablesFor(id);
+                let subId = 0;
+                let name = `${variable.name}.${i}`;
+                if (subVars) {
+                    subId = subVars?.findIndex((sv, i) => {
+                        return name === sv.name;
+                    });
+                    if (subId === -1) {
+                        subId = this.scopeId++;
+                    }
+                } else {
+                    subId = this.scopeId++;
+                }
+                scope.setSubVariableFor(id, name, variable.value[i]);
+                this.drillScope(scope, {
+                    name: name,
+                    value: variable.value[i]
+                });
+            }
+        } else if (typeof variable.value === "object") {
+            for (const property in variable.value) {
+                if (property !== "__type__" && property !== "__render__") {
+                    let subVars = scope.getSubVariablesFor(id);
+                    let subId = 0;
+                    let name = `${variable.name}.${property}`;
+                    if (subVars) {
+                        subId = subVars?.findIndex((sv, i) => {
+                            return name === sv.name;
+                        });
+                        if (subId === -1) {
+                            subId = this.scopeId++;
+                        }
+                    } else {
+                        subId = this.scopeId++;
+                    }
+                    scope.setSubVariableFor(id, name, variable.value[property]);
+                    this.drillScope(scope, {
+                        name: name,
+                        value: variable.value[property]
+                    });
+                }
+            }
+        }
+    }
+
     private getVariableResponse(
         varName: string,
         varValue: any,
@@ -535,70 +573,6 @@ export class GodotDebugSession extends LoggingDebugSession {
             type: type
         };
     }
-
-    // #endregion Protected Methods (16)
-
-    // #region Private Methods (1)
-
-    private drillScope(scope: VariableScope, variable: any) {
-        let id = scope.getIdFor(variable.name);
-        if (id === -1) {
-            id = this.scopeId++;
-        }
-        scope.setVariable(variable.name, variable.value, id);
-        if (Array.isArray(variable.value)) {
-            for (let i = 0; i < variable.value.length; i++) {
-                let subVars = scope.getSubVariablesFor(id);
-                let subId = 0;
-                let name = `${variable.name}.${i}`;
-                if (subVars) {
-                    subId = subVars?.findIndex((sv, i) => {
-                        return name === sv.name;
-                    });
-                    if (subId === -1) {
-                        subId = this.scopeId++;
-                    }
-                } else {
-                    subId = this.scopeId++;
-                }
-                scope.setSubVariableFor(id, name, variable.value[i], subId);
-                this.drillScope(scope, {
-                    name: name,
-                    value: variable.value[i]
-                });
-            }
-        } else if (typeof variable.value === "object") {
-            for (const property in variable.value) {
-                if (property !== "__type__" && property !== "__render__") {
-                    let subVars = scope.getSubVariablesFor(id);
-                    let subId = 0;
-                    let name = `${variable.name}.${property}`;
-                    if (subVars) {
-                        subId = subVars?.findIndex((sv, i) => {
-                            return name === sv.name;
-                        });
-                        if (subId === -1) {
-                            subId = this.scopeId++;
-                        }
-                    } else {
-                        subId = this.scopeId++;
-                    }
-                    scope.setSubVariableFor(
-                        id,
-                        name,
-                        variable.value[property],
-                        subId
-                    );
-                    this.drillScope(scope, {
-                        name: name,
-                        value: variable.value[property]
-                    });
-                }
-            }
-        }
-    }
-
-    // #endregion Private Methods (1)
 }
 
 function noExponents(value: number): string {

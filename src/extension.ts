@@ -1,16 +1,4 @@
-import path = require("path");
-import fs = require("fs");
 import * as vscode from "vscode";
-import cp = require("child_process");
-import net = require("net");
-import { VariantParser } from "./VariantParser";
-import * as commands from "./Commands/Commands";
-import {
-    WorkspaceFolder,
-    DebugConfiguration,
-    ProviderResult,
-    CancellationToken
-} from "vscode";
 import { GodotDebugSession } from "./godotDebug";
 
 export function activate(context: vscode.ExtensionContext) {
@@ -33,11 +21,12 @@ class GodotConfigurationProvider implements vscode.DebugConfigurationProvider {
     // #region Public Methods (1)
 
     public resolveDebugConfiguration(
-        folder: WorkspaceFolder | undefined,
-        config: DebugConfiguration,
-        token?: CancellationToken
-    ): ProviderResult<DebugConfiguration> {
+        folder: vscode.WorkspaceFolder | undefined,
+        config: vscode.DebugConfiguration,
+        token?: vscode.CancellationToken
+    ): vscode.ProviderResult<vscode.DebugConfiguration> {
         if (!config.type && !config.request && !config.name) {
+            //TODO: default launch profile
         }
 
         return config;
@@ -57,7 +46,7 @@ class GodotDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
 
     public createDebugAdapterDescriptor(
         session: vscode.DebugSession
-    ): ProviderResult<vscode.DebugAdapterDescriptor> {
+    ): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
         this.session = new GodotDebugSession();
         return new vscode.DebugAdapterInlineImplementation(this.session);
     }

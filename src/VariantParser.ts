@@ -205,10 +205,10 @@ export class VariantParser {
             __type__: "AABB",
             position: this.makeVector3(px, py, pz),
             size: this.makeVector3(sx, sy, sz),
-            __render__: () => `AABB (${this.trim(px)}, ${this.trim(
+            __render__: () => `AABB (${this.clean(px)}, ${this.clean(
                 py
-            )}, ${this.trim(pz)} 
-            - ${this.trim(sx)}, ${this.trim(sy)}, ${this.trim(sz)})`
+            )}, ${this.clean(pz)} 
+            - ${this.clean(sx)}, ${this.clean(sy)}, ${this.clean(sz)})`
         };
     }
 
@@ -249,8 +249,8 @@ export class VariantParser {
             g: g,
             b: b,
             a: a,
-            __render__: `Color (${this.trim(r)}, ${this.trim(g)},
-             ${this.trim(b)}, ${this.trim(a)})`
+            __render__: `Color (${this.clean(r)}, ${this.clean(g)},
+             ${this.clean(b)}, ${this.clean(a)})`
         };
     }
 
@@ -369,8 +369,8 @@ export class VariantParser {
             y: y,
             z: z,
             d: d,
-            __render__: () => `Plane (${this.trim(x)}, ${this.trim(y)}, 
-            ${this.trim(z)}, ${this.trim(d)})`
+            __render__: () => `Plane (${this.clean(x)}, ${this.clean(y)}, 
+            ${this.clean(z)}, ${this.clean(d)})`
         };
     }
 
@@ -459,9 +459,9 @@ export class VariantParser {
             z: z,
             w: w,
             __render__: () =>
-                `Quat (${this.trim(x)}, ${this.trim(y)}, ${this.trim(
+                `Quat (${this.clean(x)}, ${this.clean(y)}, ${this.clean(
                     z
-                )}, ${this.trim(w)})`
+                )}, ${this.clean(w)})`
         };
     }
 
@@ -476,9 +476,9 @@ export class VariantParser {
             position: this.makeVector2(x, y),
             size: this.makeVector2(sizeX, sizeY),
             __render__: () =>
-                `Rect2 (${this.trim(x)}, ${this.trim(y)} - ${this.trim(
+                `Rect2 (${this.clean(x)}, ${this.clean(y)} - ${this.clean(
                     sizeX
-                )}, ${this.trim(sizeY)})`
+                )}, ${this.clean(sizeY)})`
         };
     }
 
@@ -515,16 +515,16 @@ export class VariantParser {
             ),
             origin: this.makeVector3(o.x, o.y, o.z),
             __render__: () =>
-                `Transform ((${this.trim(b.x.x)}, ${this.trim(
+                `Transform ((${this.clean(b.x.x)}, ${this.clean(
                     b.x.y
-                )}, ${this.trim(b.x.z as number)}),
-                 (${this.trim(b.y.x)}, ${this.trim(b.y.y)}, ${this.trim(
+                )}, ${this.clean(b.x.z as number)}),
+                 (${this.clean(b.y.x)}, ${this.clean(b.y.y)}, ${this.clean(
                     b.y.z as number
                 )}), 
-                 (${this.trim(b.z.x)}, ${this.trim(b.z.y)}, ${this.trim(
+                 (${this.clean(b.z.x)}, ${this.clean(b.z.y)}, ${this.clean(
                     b.z.z as number
                 )})
-                  - (${this.trim(o.x)}, ${this.trim(o.y)}, ${this.trim(
+                  - (${this.clean(o.x)}, ${this.clean(o.y)}, ${this.clean(
                     o.z as number
                 )}))`
         };
@@ -540,12 +540,12 @@ export class VariantParser {
             origin: this.makeVector2(origin.x, origin.y),
             x: this.makeVector2(x.x, x.y),
             y: this.makeVector2(y.x, y.y),
-            __render__: () => `Transform2D ((${this.trim(
+            __render__: () => `Transform2D ((${this.clean(
                 origin.x
-            )}, ${this.trim(origin.y)}) - 
-        (${this.trim(x.x)}, ${this.trim(x.y)}), (${this.trim(y.x)}, ${this.trim(
+            )}, ${this.clean(origin.y)}) - 
+        (${this.clean(x.x)}, ${this.clean(x.y)}), (${this.clean(
                 y.x
-            )}))`
+            )}, ${this.clean(y.x)}))`
         };
     }
 
@@ -628,11 +628,15 @@ export class VariantParser {
             y: this.makeVector3(y[0], y[1], y[2]),
             z: this.makeVector3(z[0], z[1], z[2]),
             __render__: () =>
-                `Basis ((${this.trim(x[0])}, ${this.trim(x[1])}, ${this.trim(
+                `Basis ((${this.clean(x[0])}, ${this.clean(x[1])}, ${this.clean(
                     x[2]
                 )}), 
-                (${this.trim(y[0])}, ${this.trim(y[1])}, ${this.trim(y[2])}), 
-                (${this.trim(z[0])}, ${this.trim(z[1])}, ${this.trim(z[2])}))`
+                (${this.clean(y[0])}, ${this.clean(y[1])}, ${this.clean(
+                    y[2]
+                )}), 
+                (${this.clean(z[0])}, ${this.clean(z[1])}, ${this.clean(
+                    z[2]
+                )}))`
         };
     }
 
@@ -641,7 +645,7 @@ export class VariantParser {
             __type__: `Vector2`,
             x: x,
             y: y,
-            __render__: () => `Vector2 (${this.trim(x)}, ${this.trim(y)})`
+            __render__: () => `Vector2 (${this.clean(x)}, ${this.clean(y)})`
         };
     }
 
@@ -652,7 +656,7 @@ export class VariantParser {
             y: y,
             z: z,
             __render__: () =>
-                `Vector3 (${this.trim(x)}, ${this.trim(y)}, ${this.trim(z)})`
+                `Vector3 (${this.clean(x)}, ${this.clean(y)}, ${this.clean(z)})`
         };
     }
 
@@ -723,8 +727,8 @@ export class VariantParser {
         return size;
     }
 
-    private trim(value: number) {
-        return +Number.parseFloat(String(value)).toFixed(2);
+    private clean(value: number) {
+        return +Number.parseFloat(String(value)).toFixed(1);
     }
 
     // #endregion Private Methods (44)

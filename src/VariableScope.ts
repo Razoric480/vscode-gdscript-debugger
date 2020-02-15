@@ -20,7 +20,7 @@ export class VariableScope {
 
     public getIdFor(name: string) {
         let ids = Array.from(this.variables.keys());
-        return ids.findIndex((v, i) => {
+        return ids.findIndex(v => {
             return this.variables.get(v)?.name === name;
         });
     }
@@ -28,7 +28,7 @@ export class VariableScope {
     public getSubVariableFor(name: string, id: number) {
         let subVariables = this.subVariables.get(id);
         if (subVariables) {
-            let index = subVariables.findIndex((sv, i) => {
+            let index = subVariables.findIndex(sv => {
                 return sv.name === name;
             });
             if (index !== -1) {
@@ -51,27 +51,19 @@ export class VariableScope {
         return Array.from(this.variables.keys());
     }
 
-    public setSubVariableFor(
-        variableId: number,
-        name: string,
-        value: any,
-        id: number
-    ) {
-        let variable = this.variables.get(variableId);
+    public setSubVariableFor(variableId: number, name: string, value: any) {
         let subVariables = this.subVariables.get(variableId);
         if (!subVariables) {
             subVariables = [];
             this.subVariables.set(variableId, subVariables);
         }
 
-        let index = subVariables.findIndex((sv, i) => {
+        let index = subVariables.findIndex(sv => {
             return sv.name === name;
         });
 
         if (index === -1) {
             subVariables.push({ name: name, value: value });
-        } else {
-            subVariables[index].value = value;
         }
     }
 

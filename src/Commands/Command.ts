@@ -1,12 +1,3 @@
-export interface CommandChain {
-    // #region Properties (2)
-
-    command: Command;
-    paramCount: number;
-
-    // #endregion Properties (2)
-}
-
 export class Command {
     // #region Properties (5)
 

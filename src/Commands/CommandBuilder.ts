@@ -43,10 +43,12 @@ export class CommandBuilder {
                     this.currentCommand = nextCommand;
                 }
             } else {
+                let data = dataset.shift();
                 let command = this.commands.get(dataset.shift());
                 if (command) {
                     this.currentCommand = command;
                 } else {
+                    console.error(`Unsupported command: ${data}`);
                 }
             }
         }
