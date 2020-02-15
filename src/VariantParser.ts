@@ -191,7 +191,7 @@ export class VariantParser {
 
     // #endregion Public Methods (3)
 
-    // #region Private Methods (40)
+    // #region Private Methods (44)
 
     private decodeAABB(model: BufferModel) {
         let px = this.decodeFloat(model);
@@ -202,9 +202,13 @@ export class VariantParser {
         let sz = this.decodeFloat(model);
 
         return {
-            type: "AABB", 
-            position: { x: px, y: py, z: pz },
-            size: { x: sx, y: sy, z: sz }
+            __type__: "AABB",
+            position: this.makeVector3(px, py, pz),
+            size: this.makeVector3(sx, sy, sz),
+            __render__: () => `AABB (${this.trim(px)}, ${this.trim(
+                py
+            )}, ${this.trim(pz)} 
+            - ${this.trim(sx)}, ${this.trim(sy)}, ${this.trim(sz)})`
         };
     }
 
@@ -226,7 +230,11 @@ export class VariantParser {
         let y = this.decodeVector3(model);
         let z = this.decodeVector3(model);
 
-        return { type: "Basis", x: x, y: y, z: z };
+        return this.makeBasis(
+            [x.x, x.y, z.z as number],
+            [y.x, y.y, y.z as number],
+            [z.x, z.y, z.z as number]
+        );
     }
 
     private decodeColor(model: BufferModel) {
@@ -235,7 +243,15 @@ export class VariantParser {
         let b = this.decodeFloat(model);
         let a = this.decodeFloat(model);
 
-        return { type: "Color", r: r, g: g, b: b, a: a };
+        return {
+            __type__: "Color",
+            r: r,
+            g: g,
+            b: b,
+            a: a,
+            __render__: `Color (${this.trim(r)}, ${this.trim(g)},
+             ${this.trim(b)}, ${this.trim(a)})`
+        };
     }
 
     private decodeDictionary(model: BufferModel) {
@@ -258,7 +274,7 @@ export class VariantParser {
         model.offset += 8;
         model.len -= 8;
 
-        return d;
+        return d + 0.00000000001;
     }
 
     private decodeFloat(model: BufferModel) {
@@ -268,7 +284,7 @@ export class VariantParser {
         model.offset += 4;
         model.len -= 4;
 
-        return f;
+        return f + 0.00000000001;
     }
 
     private decodeInt32(model: BufferModel) {
@@ -309,7 +325,14 @@ export class VariantParser {
             }
         }
 
-        return { type: "NodePath", path: names, subpath: subNames, absolute: isAbsolute };
+        return {
+            __type__: "NodePath",
+            path: names,
+            subpath: subNames,
+            absolute: isAbsolute,
+            __render__: () =>
+                `NodePath (${names.join(".")}:${subNames.join(":")})`
+        };
     }
 
     private decodeObject(model: BufferModel) {
@@ -322,11 +345,16 @@ export class VariantParser {
             props.push({ name: name, value: value });
         }
 
-        return { type: className, properties: props };
+        return { __type__: className, properties: props };
     }
 
     private decodeObjectId(model: BufferModel) {
-        return { type: "Object", id: this.decodeUInt64(model) };
+        let id = this.decodeUInt64(model);
+        return {
+            __type__: "Object",
+            id: id,
+            __render__: () => `Object<${id}>`
+        };
     }
 
     private decodePlane(model: BufferModel) {
@@ -335,7 +363,15 @@ export class VariantParser {
         let z = this.decodeFloat(model);
         let d = this.decodeFloat(model);
 
-        return { type: "Plane", x: x, y: y, z: z, d: d };
+        return {
+            __type__: "Plane",
+            x: x,
+            y: y,
+            z: z,
+            d: d,
+            __render__: () => `Plane (${this.trim(x)}, ${this.trim(y)}, 
+            ${this.trim(z)}, ${this.trim(d)})`
+        };
     }
 
     private decodePoolByteArray(model: BufferModel) {
@@ -402,7 +438,7 @@ export class VariantParser {
 
     private decodePoolVector3Array(model: BufferModel) {
         let count = this.decodeUInt32(model);
-        let output: { x: number; y: number; z: number }[] = [];
+        let output: { x: number; y: number; z: number | undefined }[] = [];
         for (let i = 0; i < count; i++) {
             output.push(this.decodeVector3(model));
         }
@@ -416,7 +452,17 @@ export class VariantParser {
         let z = this.decodeFloat(model);
         let w = this.decodeFloat(model);
 
-        return { type: "Quat", x: x, y: y, z: z, w: w };
+        return {
+            __type__: "Quat",
+            x: x,
+            y: y,
+            z: z,
+            w: w,
+            __render__: () =>
+                `Quat (${this.trim(x)}, ${this.trim(y)}, ${this.trim(
+                    z
+                )}, ${this.trim(w)})`
+        };
     }
 
     private decodeRect2(model: BufferModel) {
@@ -425,7 +471,15 @@ export class VariantParser {
         let sizeX = this.decodeFloat(model);
         let sizeY = this.decodeFloat(model);
 
-        return { type: "Rect2", position: { x: x, y: y }, size: { x: sizeX, y: sizeY } };
+        return {
+            __type__: "Rect2",
+            position: this.makeVector2(x, y),
+            size: this.makeVector2(sizeX, sizeY),
+            __render__: () =>
+                `Rect2 (${this.trim(x)}, ${this.trim(y)} - ${this.trim(
+                    sizeX
+                )}, ${this.trim(sizeY)})`
+        };
     }
 
     private decodeString(model: BufferModel) {
@@ -452,7 +506,28 @@ export class VariantParser {
         let b = this.decodeBasis(model);
         let o = this.decodeVector3(model);
 
-        return { type: "Transform", basis: b, origin: o };
+        return {
+            __type__: "Transform",
+            basis: this.makeBasis(
+                [b.x.x, b.x.y, b.x.z as number],
+                [b.y.x, b.y.y, b.y.z as number],
+                [b.z.x, b.z.y, b.z.z as number]
+            ),
+            origin: this.makeVector3(o.x, o.y, o.z),
+            __render__: () =>
+                `Transform ((${this.trim(b.x.x)}, ${this.trim(
+                    b.x.y
+                )}, ${this.trim(b.x.z as number)}),
+                 (${this.trim(b.y.x)}, ${this.trim(b.y.y)}, ${this.trim(
+                    b.y.z as number
+                )}), 
+                 (${this.trim(b.z.x)}, ${this.trim(b.z.y)}, ${this.trim(
+                    b.z.z as number
+                )})
+                  - (${this.trim(o.x)}, ${this.trim(o.y)}, ${this.trim(
+                    o.z as number
+                )}))`
+        };
     }
 
     private decodeTransform2(model: BufferModel) {
@@ -460,7 +535,18 @@ export class VariantParser {
         let x = this.decodeVector2(model);
         let y = this.decodeVector2(model);
 
-        return { type: "Transform2D", origin: origin, x: x, y: y };
+        return {
+            __type__: "Transform2D",
+            origin: this.makeVector2(origin.x, origin.y),
+            x: this.makeVector2(x.x, x.y),
+            y: this.makeVector2(y.x, y.y),
+            __render__: () => `Transform2D ((${this.trim(
+                origin.x
+            )}, ${this.trim(origin.y)}) - 
+        (${this.trim(x.x)}, ${this.trim(x.y)}), (${this.trim(y.x)}, ${this.trim(
+                y.x
+            )}))`
+        };
     }
 
     private decodeUInt32(model: BufferModel) {
@@ -483,7 +569,7 @@ export class VariantParser {
         let x = this.decodeFloat(model);
         let y = this.decodeFloat(model);
 
-        return { type: "Vector2", x: x, y: y };
+        return this.makeVector2(x, y);
     }
 
     private decodeVector3(model: BufferModel) {
@@ -491,7 +577,7 @@ export class VariantParser {
         let y = this.decodeFloat(model);
         let z = this.decodeFloat(model);
 
-        return { type: "Vector3", x: x, y: y, z: z };
+        return this.makeVector3(x, y, z);
     }
 
     private encodeArray(arr: any[], model: BufferModel) {
@@ -533,6 +619,41 @@ export class VariantParser {
     private encodeUInt32(int: number, model: BufferModel) {
         model.buffer.writeUInt32LE(int, model.offset);
         model.offset += 4;
+    }
+
+    private makeBasis(x: number[], y: number[], z: number[]) {
+        return {
+            __type__: "Basis",
+            x: this.makeVector3(x[0], x[1], x[2]),
+            y: this.makeVector3(y[0], y[1], y[2]),
+            z: this.makeVector3(z[0], z[1], z[2]),
+            __render__: () =>
+                `Basis ((${this.trim(x[0])}, ${this.trim(x[1])}, ${this.trim(
+                    x[2]
+                )}), 
+                (${this.trim(y[0])}, ${this.trim(y[1])}, ${this.trim(y[2])}), 
+                (${this.trim(z[0])}, ${this.trim(z[1])}, ${this.trim(z[2])}))`
+        };
+    }
+
+    private makeVector2(x: number, y: number) {
+        return {
+            __type__: `Vector2`,
+            x: x,
+            y: y,
+            __render__: () => `Vector2 (${this.trim(x)}, ${this.trim(y)})`
+        };
+    }
+
+    private makeVector3(x: number, y: number, z: number) {
+        return {
+            __type__: `Vector3`,
+            x: x,
+            y: y,
+            z: z,
+            __render__: () =>
+                `Vector3 (${this.trim(x)}, ${this.trim(y)}, ${this.trim(z)})`
+        };
     }
 
     private sizeArray(arr: any[]): number {
@@ -602,5 +723,9 @@ export class VariantParser {
         return size;
     }
 
-    // #endregion Private Methods (40)
+    private trim(value: number) {
+        return +Number.parseFloat(String(value)).toFixed(2);
+    }
+
+    // #endregion Private Methods (44)
 }

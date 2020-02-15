@@ -184,27 +184,17 @@ export class GodotDebugSession extends LoggingDebugSession {
                 let file = stackFiles[stackLevel];
                 let fileScopes = this.scopes.get(file);
 
-                let localScope: VariableScope;
-                let memberScope: VariableScope;
-                let globalScope: VariableScope;
+                fileScopes = [];
 
-                if (!fileScopes) {
-                    fileScopes = [];
+                let localScope = new VariableScope(this.scopeId++);
+                let memberScope = new VariableScope(this.scopeId++);
+                let globalScope = new VariableScope(this.scopeId++);
 
-                    localScope = new VariableScope(this.scopeId++);
-                    memberScope = new VariableScope(this.scopeId++);
-                    globalScope = new VariableScope(this.scopeId++);
+                fileScopes.push(localScope);
+                fileScopes.push(memberScope);
+                fileScopes.push(globalScope);
 
-                    fileScopes.push(localScope);
-                    fileScopes.push(memberScope);
-                    fileScopes.push(globalScope);
-
-                    this.scopes.set(file, fileScopes);
-                } else {
-                    localScope = fileScopes[0];
-                    memberScope = fileScopes[1];
-                    globalScope = fileScopes[2];
-                }
+                this.scopes.set(file, fileScopes);
 
                 let outLocalScope: DebugProtocol.Scope = {
                     name: "Locals",
@@ -401,42 +391,19 @@ export class GodotDebugSession extends LoggingDebugSession {
                 varIds.forEach(id => {
                     let variable = outScope?.getVariable(id);
                     if (variable && variable.name.indexOf(".") === -1) {
-                        let refId = 0;
-                        let value = "";
-                        if (
-                            typeof variable.value === "number" &&
-                            !Number.isInteger(variable.value)
-                        ) {
-                            value = String(+Number.parseFloat(
-                                noExponents(variable.value)
-                            ).toFixed(6));
-                        } else if (typeof variable.value === "object") {
-                            refId = id;
-                            if (variable.value.type) {
-                                value = variable.value.type;
-                            } else {
-                                value = "Object";
-                            }
-                        } else {
-                            if(variable.value) {
-                                value = String(variable.value);
-                            }
-                            else {
-                                value = Number.isInteger(variable.value) ? "0" : "null";
-                            }
-                        }
-                        response.body.variables.push({
-                            name: variable.name,
-                            value: value,
-                            variablesReference: refId
-                        });
+                        response.body.variables.push(
+                            this.getVariableResponse(
+                                variable.name,
+                                variable.value,
+                                id
+                            )
+                        );
                     }
                 });
             } else {
                 let variable = outScope.getVariable(outId);
                 if (variable) {
                     let subVariables = outScope.getSubVariablesFor(outId);
-                    let varRef = 0;
                     if (subVariables) {
                         let ids = outScope.getVariableIds();
                         let pathTo = variable.name;
@@ -444,61 +411,51 @@ export class GodotDebugSession extends LoggingDebugSession {
                             variables: []
                         };
 
-                        subVariables.forEach(sv => {
-                            let name = sv.name;
-                            let idIndex = ids.findIndex(id => {
-                                let variable = outScope?.getVariable(id);
-                                return (
-                                    variable &&
-                                    name.indexOf(pathTo) !== -1
+                        if (args.filter === "indexed") {
+                            let count = args.count || 0;
+                            for (let i = 0; i < count; i++) {
+                                let name = `${pathTo}.${i}`;
+                                let idIndex = ids.findIndex(id => {
+                                    let variable = outScope?.getVariable(id);
+                                    return variable && name === variable.name;
+                                });
+
+                                response.body.variables.push(
+                                    this.getVariableResponse(
+                                        name,
+                                        variable.value[i],
+                                        ids[idIndex]
+                                    )
+                                );
+                            }
+                        } else {
+                            subVariables.forEach(sv => {
+                                let name = sv.name;
+                                let idIndex = ids.findIndex(id => {
+                                    let variable = outScope?.getVariable(id);
+                                    return (
+                                        variable && name.indexOf(pathTo) !== -1
+                                    );
+                                });
+
+                                response.body.variables.push(
+                                    this.getVariableResponse(
+                                        name,
+                                        sv.value,
+                                        ids[idIndex]
+                                    )
                                 );
                             });
-                            
-                            let value = "";
-                            let refId = 0;
-                            if (
-                                typeof sv.value === "number" &&
-                                !Number.isInteger(sv.value)
-                            ) {
-                                value = String(+Number.parseFloat(
-                                    noExponents(sv.value)
-                                ).toFixed(6));
-                            } else if (typeof sv.value === "object") {
-                                refId = ids[idIndex];
-                                if (sv.value.type) {
-                                    value = sv.value.type;
-                                } else {
-                                    value = "Object";
-                                }
-                            } else {
-                                if(sv.value) {
-                                    value = String(sv.value);
-                                }
-                                else {
-                                    value = Number.isInteger(sv.value) ? "0" : "null";
-                                }
-                            }
-
-                            response.body.variables.push({
-                                name: name.replace(/([a-zA-Z_]+?\.)*/g, ""),
-                                value: value,
-                                variablesReference: refId
-                            });
-                        });
+                        }
                     } else {
                         response.body = {
                             variables: [
-                                {
-                                    name: variable.name.replace(
-                                        /([a-zA-Z_]+?\.)*/g,
-                                        ""
-                                    ),
-                                    value:
-                                        typeof variable.value === "object"
-                                            ? variable.value.type
-                                            : variable.value,
-                                    variablesReference: 0
-                                }
+                                this.getVariableResponse(
+                                    variable.name,
+                                    variable.value,
+                                    0,
+                                    true
+                                )
                             ]
                         };
                     }
@@ -511,6 +468,74 @@ export class GodotDebugSession extends LoggingDebugSession {
         }
     }
 
+    private getVariableResponse(
+        varName: string,
+        varValue: any,
+        id: number,
+        skipSubVar?: boolean
+    ) {
+        let value = "";
+        let refId = 0;
+        let arrayCount = 0;
+        let type = "";
+        if (!skipSubVar) {
+            if (typeof varValue === "number" && !Number.isInteger(varValue)) {
+                value = String(
+                    +Number.parseFloat(noExponents(varValue)).toFixed(4)
+                );
+                type = "Float";
+            } else if (Array.isArray(varValue)) {
+                value = "Array";
+                refId = id;
+                arrayCount = varValue.length;
+                type = "array";
+            } else if (typeof varValue === "object") {
+                refId = id;
+                if (varValue.__type__) {
+                    if (varValue.__type__ === "Object") {
+                        refId = 0;
+                    }
+                    if (varValue.__render__) {
+                        value = varValue.__render__();
+                    } else {
+                        value = varValue.__type__;
+                    }
+                    type = varValue.__type__;
+                } else {
+                    value = "Object";
+                }
+            } else {
+                if (varValue) {
+                    if (Number.isInteger(varValue)) {
+                        type = "Int";
+                        value = `${varValue}`;
+                    } else if (typeof varValue === "string") {
+                        type = "String";
+                        value = String(varValue);
+                    } else {
+                        type = "unknown";
+                        value = `${varValue}`;
+                    }
+                } else {
+                    if (Number.isInteger(varValue)) {
+                        type = "Int";
+                        value = "0";
+                    } else {
+                        type = "unknown";
+                        value = "null";
+                    }
+                }
+            }
+        }
+        return {
+            name: varName.replace(/([a-zA-Z0-9_]+?\.)*/g, ""),
+            value: value,
+            variablesReference: refId,
+            indexedVariables: arrayCount,
+            type: type
+        };
+    }
+
     // #endregion Protected Methods (16)
 
     // #region Private Methods (1)
@@ -521,9 +546,30 @@ export class GodotDebugSession extends LoggingDebugSession {
             id = this.scopeId++;
         }
         scope.setVariable(variable.name, variable.value, id);
-        if (typeof variable.value === "object") {
+        if (Array.isArray(variable.value)) {
+            for (let i = 0; i < variable.value.length; i++) {
+                let subVars = scope.getSubVariablesFor(id);
+                let subId = 0;
+                let name = `${variable.name}.${i}`;
+                if (subVars) {
+                    subId = subVars?.findIndex((sv, i) => {
+                        return name === sv.name;
+                    });
+                    if (subId === -1) {
+                        subId = this.scopeId++;
+                    }
+                } else {
+                    subId = this.scopeId++;
+                }
+                scope.setSubVariableFor(id, name, variable.value[i], subId);
+                this.drillScope(scope, {
+                    name: name,
+                    value: variable.value[i]
+                });
+            }
+        } else if (typeof variable.value === "object") {
             for (const property in variable.value) {
-                if (property !== "type") {
+                if (property !== "__type__" && property !== "__render__") {
                     let subVars = scope.getSubVariablesFor(id);
                     let subId = 0;
                     let name = `${variable.name}.${property}`;
