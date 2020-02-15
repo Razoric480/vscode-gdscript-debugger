@@ -31,7 +31,7 @@ export interface GodotStackFrame {
 }
 
 export class GodotDebugRuntime extends EventEmitter {
-    // #region Properties (13)
+    // #region Properties (14)
 
     private address = "127.0.0.1";
     private breakpointId = 0;
@@ -45,14 +45,14 @@ export class GodotDebugRuntime extends EventEmitter {
     private paused = false;
     private port = 6007;
     private project = "";
-    private server: net.Server | undefined;
     private scopeCallbacks: ((scopes: {
         locals: any[];
         members: any[];
         globals: any[];
     }) => void)[] = [];
+    private server: net.Server | undefined;
 
-    // #endregion Properties (13)
+    // #endregion Properties (14)
 
     // #region Constructors (1)
 
@@ -62,7 +62,7 @@ export class GodotDebugRuntime extends EventEmitter {
 
     // #endregion Constructors (1)
 
-    // #region Public Methods (14)
+    // #region Public Methods (12)
 
     public break() {
         if (this.paused) {
@@ -204,6 +204,11 @@ export class GodotDebugRuntime extends EventEmitter {
         );
 
         this.builder.registerCommand(
+            new commands.Command("message:inspect_object", params => {
+            })
+        );
+
+        this.builder.registerCommand(
             new commands.Command("stack_frame_vars", params => {
                 let locals: any[] = [];
                 let members: any[] = [];
@@ -258,14 +263,13 @@ export class GodotDebugRuntime extends EventEmitter {
 
             connection.on("close", hadError => {
                 if (hadError) {
-                    console.log("Errored out");
-                } else {
-                    console.log("closed");
+                    this.sendEvent("terminated");
                 }
-                connection.destroy();
             });
 
-            connection.on("end", () => {});
+            connection.on("end", () => {
+                this.sendEvent("terminated");
+            });
 
             connection.on("error", error => {
                 console.error(error);
@@ -293,20 +297,18 @@ export class GodotDebugRuntime extends EventEmitter {
             this.server?.close();
             terminate(this.godotExec?.pid, (error: string | undefined) => {
                 if (error) {
-                    console.log(error);
-                } else {
-                    console.log("Debug end");
+                    console.error(error);
                 }
             });
         });
-        this.sendEvent("terminated", false);
+        this.sendEvent("terminated");
     }
 
     public triggerBreakpoint(stackFrames: GodotStackFrame[]) {
         this.sendEvent("stopOnBreakpoint", stackFrames);
     }
 
-    // #endregion Public Methods (14)
+    // #endregion Public Methods (12)
 
     // #region Private Methods (3)
 

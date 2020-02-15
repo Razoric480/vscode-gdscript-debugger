@@ -1,17 +1,11 @@
 import {
-    Logger,
-    logger,
     LoggingDebugSession,
     InitializedEvent,
     TerminatedEvent,
     StoppedEvent,
     BreakpointEvent,
-    OutputEvent,
     Thread,
-    StackFrame,
-    Scope,
     Source,
-    Handles,
     Breakpoint,
     Variable
 } from "vscode-debugadapter";
@@ -22,7 +16,6 @@ import {
     GodotStackFrame
 } from "./godotDebugRuntime";
 const { Subject } = require("await-notify");
-import * as vscode from "vscode";
 import fs = require("fs");
 
 interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
@@ -75,17 +68,15 @@ export class GodotDebugSession extends LoggingDebugSession {
                 })
             );
         });
-        
-        this.runtime.on("terminated", restart => {
-            this.sendEvent(
-                new TerminatedEvent(restart)
-            );
+
+        this.runtime.on("terminated", () => {
+            this.sendEvent(new TerminatedEvent(false));
         });
     }
 
     // #endregion Constructors (1)
 
-    // #region Protected Methods (17)
+    // #region Protected Methods (16)
 
     protected breakpointLocationsRequest(
         response: DebugProtocol.BreakpointLocationsResponse,
@@ -125,13 +116,6 @@ export class GodotDebugSession extends LoggingDebugSession {
         this.sendResponse(response);
     }
 
-    protected evaluateRequest(
-        response: DebugProtocol.EvaluateResponse,
-        args: DebugProtocol.EvaluateArguments
-    ): void {
-        let breakhere = 10;
-    }
-
     protected initializeRequest(
         response: DebugProtocol.InitializeResponse,
         args: DebugProtocol.InitializeRequestArguments
@@ -139,7 +123,7 @@ export class GodotDebugSession extends LoggingDebugSession {
         response.body = response.body || {};
 
         response.body.supportsConfigurationDoneRequest = true;
-        response.body.supportsEvaluateForHovers = true;
+        response.body.supportsEvaluateForHovers = false;
         response.body.supportsStepBack = false;
         response.body.supportsBreakpointLocationsRequest = false;
         response.body.supportsCancelRequest = false;
@@ -339,7 +323,7 @@ export class GodotDebugSession extends LoggingDebugSession {
         };
         this.sendResponse(response);
     }
-
+//TODO: Arrays coming up as objects?
     protected async variablesRequest(
         response: DebugProtocol.VariablesResponse,
         args: DebugProtocol.VariablesArguments,
@@ -354,9 +338,9 @@ export class GodotDebugSession extends LoggingDebugSession {
                     value = +Number.parseFloat(noExponents(s.value)).toFixed(4);
                 } else if (typeof s.value === "object") {
                     value = JSON.stringify(s.value, undefined, " ").replace(
-                        /(\n|\r|\r\n)/g,
+                        /\n/g,
                         ""
-                    );
+                    ).replace(/\}$/, " }");
                 } else {
                     value = s.value;
                 }
@@ -375,7 +359,7 @@ export class GodotDebugSession extends LoggingDebugSession {
         }
     }
 
-    // #endregion Protected Methods (17)
+    // #endregion Protected Methods (16)
 }
 
 function noExponents(value: number): string {

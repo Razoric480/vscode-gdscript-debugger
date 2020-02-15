@@ -23,39 +23,48 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.debug.registerDebugAdapterDescriptorFactory("godot", factory)
     );
-    
+
     context.subscriptions.push(factory);
 }
 
 export function deactivate() {}
 
 class GodotConfigurationProvider implements vscode.DebugConfigurationProvider {
-    resolveDebugConfiguration(
+    // #region Public Methods (1)
+
+    public resolveDebugConfiguration(
         folder: WorkspaceFolder | undefined,
         config: DebugConfiguration,
         token?: CancellationToken
     ): ProviderResult<DebugConfiguration> {
-        if(!config.type && !config.request && !config.name) {
-            
+        if (!config.type && !config.request && !config.name) {
         }
-        
+
         return config;
     }
+
+    // #endregion Public Methods (1)
 }
 
 class GodotDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
+    // #region Properties (1)
+
     private session: GodotDebugSession | undefined;
-    
-    createDebugAdapterDescriptor(
+
+    // #endregion Properties (1)
+
+    // #region Public Methods (2)
+
+    public createDebugAdapterDescriptor(
         session: vscode.DebugSession
     ): ProviderResult<vscode.DebugAdapterDescriptor> {
         this.session = new GodotDebugSession();
-        return new vscode.DebugAdapterInlineImplementation(
-            this.session
-        );
+        return new vscode.DebugAdapterInlineImplementation(this.session);
     }
-    
-    dispose() {
+
+    public dispose() {
         this.session = undefined;
     }
+
+    // #endregion Public Methods (2)
 }

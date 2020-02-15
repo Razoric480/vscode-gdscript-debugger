@@ -28,12 +28,7 @@ export class GodotCommands {
 
     // #endregion Constructors (1)
 
-    // #region Public Methods (10)
-    
-    public setConnection(connection: net.Socket) {
-        this.connection = connection;
-        this.canWrite = true;
-    }
+    // #region Public Methods (12)
 
     public sendBreakCommand() {
         let buffer = this.builder.createBufferedCommand("break", this.parser);
@@ -53,6 +48,16 @@ export class GodotCommands {
             "get_stack_frame_vars",
             this.parser,
             [level]
+        );
+
+        this.addAndSend(buffer);
+    }
+
+    public sendInspectObjectCommand(objectId: number) {
+        let buffer = this.builder.createBufferedCommand(
+            "inspect_object",
+            this.parser,
+            [objectId]
         );
 
         this.addAndSend(buffer);
@@ -102,7 +107,12 @@ export class GodotCommands {
         }
     }
 
-    // #endregion Public Methods (10)
+    public setConnection(connection: net.Socket) {
+        this.connection = connection;
+        this.canWrite = true;
+    }
+
+    // #endregion Public Methods (12)
 
     // #region Private Methods (3)
 
@@ -121,10 +131,10 @@ export class GodotCommands {
     }
 
     private sendBuffer() {
-        if(!this.connection) {
+        if (!this.connection) {
             return;
         }
-        
+
         while (this.canWrite && this.commandBuffer.length > 0) {
             this.canWrite = this.connection.write(
                 this.commandBuffer.shift() as Buffer

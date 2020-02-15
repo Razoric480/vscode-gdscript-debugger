@@ -283,7 +283,7 @@ export class VariantParser {
         model.len -= 8;
         model.offset += 8;
 
-        return u;
+        return Number(u);
     }
 
     private decodeNodePath(model: BufferModel) {
@@ -475,7 +475,7 @@ export class VariantParser {
         model.len -= 8;
         model.offset += 8;
 
-        return u;
+        return Number(u);
     }
 
     private decodeVector2(model: BufferModel) {

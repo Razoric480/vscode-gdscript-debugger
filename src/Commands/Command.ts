@@ -1,18 +1,29 @@
 export interface CommandChain {
+    // #region Properties (2)
+
     command: Command;
     paramCount: number;
+
+    // #endregion Properties (2)
 }
 
 export class Command {
-    private parameters: Array<
-        boolean | number | string | {} | [] | undefined
-    > = [];
+    // #region Properties (5)
+
     private callback?: (
         parameters: Array<boolean | number | string | {} | [] | undefined>
     ) => void | undefined;
-    private paramCountCallback?: (paramCount: number) => number;
-    name: string;
     private paramCount = -1;
+    private paramCountCallback?: (paramCount: number) => number;
+    private parameters: Array<
+        boolean | number | string | {} | [] | undefined
+    > = [];
+
+    public name: string;
+
+    // #endregion Properties (5)
+
+    // #region Constructors (1)
 
     constructor(
         name: string,
@@ -24,7 +35,11 @@ export class Command {
         this.paramCountCallback = modifyParamCount;
     }
 
-    appendParameter(
+    // #endregion Constructors (1)
+
+    // #region Public Methods (2)
+
+    public appendParameter(
         parameter: boolean | number | string | {} | [] | undefined
     ) {
         if (this.paramCount <= 0) {
@@ -41,13 +56,7 @@ export class Command {
         }
     }
 
-    protected getParamCount() {
-        return this.paramCountCallback
-            ? this.paramCountCallback(this.paramCount)
-            : this.paramCount;
-    }
-
-    chain() {
+    public chain() {
         if (this.parameters.length === this.getParamCount()) {
             this.parameters.length = 0;
             this.paramCount = -1;
@@ -56,4 +65,16 @@ export class Command {
             return this;
         }
     }
+
+    // #endregion Public Methods (2)
+
+    // #region Protected Methods (1)
+
+    protected getParamCount() {
+        return this.paramCountCallback
+            ? this.paramCountCallback(this.paramCount)
+            : this.paramCount;
+    }
+
+    // #endregion Protected Methods (1)
 }
