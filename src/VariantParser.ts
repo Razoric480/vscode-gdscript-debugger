@@ -202,6 +202,7 @@ export class VariantParser {
         let sz = this.decodeFloat(model);
 
         return {
+            type: "AABB", 
             position: { x: px, y: py, z: pz },
             size: { x: sx, y: sy, z: sz }
         };
@@ -225,7 +226,7 @@ export class VariantParser {
         let y = this.decodeVector3(model);
         let z = this.decodeVector3(model);
 
-        return { x: x, y: y, z: z };
+        return { type: "Basis", x: x, y: y, z: z };
     }
 
     private decodeColor(model: BufferModel) {
@@ -234,7 +235,7 @@ export class VariantParser {
         let b = this.decodeFloat(model);
         let a = this.decodeFloat(model);
 
-        return { r: r, g: g, b: b, a: a };
+        return { type: "Color", r: r, g: g, b: b, a: a };
     }
 
     private decodeDictionary(model: BufferModel) {
@@ -308,7 +309,7 @@ export class VariantParser {
             }
         }
 
-        return { path: names, subpath: subNames, absolute: isAbsolute };
+        return { type: "NodePath", path: names, subpath: subNames, absolute: isAbsolute };
     }
 
     private decodeObject(model: BufferModel) {
@@ -321,11 +322,11 @@ export class VariantParser {
             props.push({ name: name, value: value });
         }
 
-        return { class: className, properties: props };
+        return { type: className, properties: props };
     }
 
     private decodeObjectId(model: BufferModel) {
-        return { id: this.decodeUInt64(model) };
+        return { type: "Object", id: this.decodeUInt64(model) };
     }
 
     private decodePlane(model: BufferModel) {
@@ -334,7 +335,7 @@ export class VariantParser {
         let z = this.decodeFloat(model);
         let d = this.decodeFloat(model);
 
-        return { x: x, y: y, z: z, d: d };
+        return { type: "Plane", x: x, y: y, z: z, d: d };
     }
 
     private decodePoolByteArray(model: BufferModel) {
@@ -415,7 +416,7 @@ export class VariantParser {
         let z = this.decodeFloat(model);
         let w = this.decodeFloat(model);
 
-        return { x: x, y: y, z: z, w: w };
+        return { type: "Quat", x: x, y: y, z: z, w: w };
     }
 
     private decodeRect2(model: BufferModel) {
@@ -424,7 +425,7 @@ export class VariantParser {
         let sizeX = this.decodeFloat(model);
         let sizeY = this.decodeFloat(model);
 
-        return { position: { x: x, y: y }, size: { x: sizeX, y: sizeY } };
+        return { type: "Rect2", position: { x: x, y: y }, size: { x: sizeX, y: sizeY } };
     }
 
     private decodeString(model: BufferModel) {
@@ -451,7 +452,7 @@ export class VariantParser {
         let b = this.decodeBasis(model);
         let o = this.decodeVector3(model);
 
-        return { basis: b, origin: o };
+        return { type: "Transform", basis: b, origin: o };
     }
 
     private decodeTransform2(model: BufferModel) {
@@ -459,7 +460,7 @@ export class VariantParser {
         let x = this.decodeVector2(model);
         let y = this.decodeVector2(model);
 
-        return { origin: origin, x: x, y: y };
+        return { type: "Transform2D", origin: origin, x: x, y: y };
     }
 
     private decodeUInt32(model: BufferModel) {
@@ -482,7 +483,7 @@ export class VariantParser {
         let x = this.decodeFloat(model);
         let y = this.decodeFloat(model);
 
-        return { x: x, y: y };
+        return { type: "Vector2", x: x, y: y };
     }
 
     private decodeVector3(model: BufferModel) {
@@ -490,7 +491,7 @@ export class VariantParser {
         let y = this.decodeFloat(model);
         let z = this.decodeFloat(model);
 
-        return { x: x, y: y, z: z };
+        return { type: "Vector3", x: x, y: y, z: z };
     }
 
     private encodeArray(arr: any[], model: BufferModel) {

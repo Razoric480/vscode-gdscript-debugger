@@ -323,7 +323,8 @@ export class GodotDebugSession extends LoggingDebugSession {
         };
         this.sendResponse(response);
     }
-//TODO: Arrays coming up as objects?
+
+    //TODO: Arrays coming up as objects?
     protected async variablesRequest(
         response: DebugProtocol.VariablesResponse,
         args: DebugProtocol.VariablesArguments,
@@ -331,28 +332,35 @@ export class GodotDebugSession extends LoggingDebugSession {
     ) {
         let scoped = this.scopes[args.variablesReference];
         if (scoped) {
-            let output: Variable[] = [];
-            scoped.forEach(s => {
-                let value: any;
-                if (typeof s.value === "number" && !Number.isInteger(s.value)) {
-                    value = +Number.parseFloat(noExponents(s.value)).toFixed(4);
-                } else if (typeof s.value === "object") {
-                    value = JSON.stringify(s.value, undefined, " ").replace(
-                        /\n/g,
-                        ""
-                    ).replace(/\}$/, " }");
-                } else {
-                    value = s.value;
-                }
-                let variable: Variable = {
-                    name: s.name,
-                    value: `${value}`,
-                    variablesReference: 0
-                };
-                output.push(variable);
-            });
             response.body = {
-                variables: output
+                variables: scoped.map(s => {
+                    let value: any;
+                    if (
+                        typeof s.value === "number" &&
+                        !Number.isInteger(s.value)
+                    ) {
+                        value = +Number.parseFloat(
+                            noExponents(s.value)
+                        ).toFixed(4);
+                    } else if (typeof s.value === "object") {
+                        value = JSON.stringify(s.value, undefined, " ")
+                            .replace(/"(.*?)": /g, "$1: ")
+                            .replace(/\n/g, "")
+                            .replace(/\}$/, " }");
+                        if (s.value.type) {
+                            value = value.replace(/type: ".*?", /, "");
+                            value = `${s.value.type} ${value}`;
+                        }
+                    } else {
+                        value = s.value;
+                    }
+
+                    return {
+                        name: s.name,
+                        value: `${value}`,
+                        variablesReference: 0
+                    };
+                })
             };
 
             this.sendResponse(response);
