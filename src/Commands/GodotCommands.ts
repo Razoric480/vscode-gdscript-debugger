@@ -1,14 +1,15 @@
 import { CommandBuilder } from "./CommandBuilder";
 import { VariantParser } from "../VariantParser";
 import net = require("net");
+import path = require("path");
 
 export class GodotCommands {
     // #region Properties (5)
 
     private builder: CommandBuilder;
-    private canWrite = true;
+    private canWrite = false;
     private commandBuffer: Buffer[] = [];
-    private connection: net.Socket;
+    private connection: net.Socket | undefined;
     private parser: VariantParser;
 
     // #endregion Properties (5)
@@ -18,7 +19,7 @@ export class GodotCommands {
     constructor(
         builder: CommandBuilder,
         parser: VariantParser,
-        connection: net.Socket
+        connection?: net.Socket
     ) {
         this.builder = builder;
         this.parser = parser;
@@ -27,15 +28,15 @@ export class GodotCommands {
 
     // #endregion Constructors (1)
 
-    // #region Public Methods (8)
+    // #region Public Methods (10)
+    
+    public setConnection(connection: net.Socket) {
+        this.connection = connection;
+        this.canWrite = true;
+    }
 
-    public sendGetScopesCommand(level: number) {
-        let buffer = this.builder.createBufferedCommand(
-            "get_stack_frame_vars",
-            this.parser,
-            [level]
-        );
-
+    public sendBreakCommand() {
+        let buffer = this.builder.createBufferedCommand("break", this.parser);
         this.addAndSend(buffer);
     }
 
@@ -44,6 +45,16 @@ export class GodotCommands {
             "continue",
             this.parser
         );
+        this.addAndSend(buffer);
+    }
+
+    public sendGetScopesCommand(level: number) {
+        let buffer = this.builder.createBufferedCommand(
+            "get_stack_frame_vars",
+            this.parser,
+            [level]
+        );
+
         this.addAndSend(buffer);
     }
 
@@ -91,7 +102,7 @@ export class GodotCommands {
         }
     }
 
-    // #endregion Public Methods (8)
+    // #endregion Public Methods (10)
 
     // #region Private Methods (3)
 
@@ -104,12 +115,16 @@ export class GodotCommands {
         let buffer = this.builder.createBufferedCommand(
             "breakpoint",
             this.parser,
-            [line, file, set]
+            [file, line, set]
         );
         this.addAndSend(buffer);
     }
 
     private sendBuffer() {
+        if(!this.connection) {
+            return;
+        }
+        
         while (this.canWrite && this.commandBuffer.length > 0) {
             this.canWrite = this.connection.write(
                 this.commandBuffer.shift() as Buffer

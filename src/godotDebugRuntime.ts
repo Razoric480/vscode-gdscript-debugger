@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+const terminate = require("terminate");
 import { EventEmitter } from "events";
 import net = require("net");
 import cp = require("child_process");
@@ -31,24 +31,18 @@ export interface GodotStackFrame {
 }
 
 export class GodotDebugRuntime extends EventEmitter {
-    // #region Properties (19)
-
-    private static FUNCTION_REGEX = /^[^#]*?func[ \t]+?/;
-    private static INDENTED_REGEX = /^[ \t]+?/;
-    private static ONREADY_REGEX = /^[^#]*?onready[ \t]+?var/;
+    // #region Properties (13)
 
     private address = "127.0.0.1";
     private breakpointId = 0;
     private breakpoints = new Map<string, GodotBreakpoint[]>();
-    private broke = false;
-    private brokenBp: GodotBreakpoint | undefined;
-    private brokenReason = "";
     private builder = new commands.CommandBuilder();
-    private canContinue = true;
+    private commandParser = new VariantParser();
     private connection: net.Socket | undefined;
-    private godotCommands: GodotCommands | undefined;
+    private godotCommands = new GodotCommands(this.builder, this.commandParser);
+    private godotExec: cp.ChildProcess | undefined;
     private out: vscode.OutputChannel | undefined;
-    private parser = new VariantParser();
+    private paused = false;
     private port = 6007;
     private project = "";
     private scopeCallbacks: ((scopes: {
@@ -56,9 +50,8 @@ export class GodotDebugRuntime extends EventEmitter {
         members: any[];
         globals: any[];
     }) => void)[] = [];
-    private sourceLines = new Map<string, string[]>();
 
-    // #endregion Properties (19)
+    // #endregion Properties (13)
 
     // #region Constructors (1)
 
@@ -68,7 +61,15 @@ export class GodotDebugRuntime extends EventEmitter {
 
     // #endregion Constructors (1)
 
-    // #region Public Methods (12)
+    // #region Public Methods (14)
+
+    public break() {
+        if (this.paused) {
+            this.godotCommands.sendContinueCommand();
+        } else {
+            this.godotCommands.sendBreakCommand();
+        }
+    }
 
     public clearBreakPoint(
         path: string,
@@ -88,21 +89,27 @@ export class GodotDebugRuntime extends EventEmitter {
     }
 
     public clearBreakpoints(path: string): void {
+        let bps = this.breakpoints.get(path);
+        if (bps) {
+            bps.forEach(bp => {
+                let filePath = bp.file;
+                this.godotCommands.sendRemoveBreakpointCommand(
+                    bp.file,
+                    bp.line
+                );
+            });
+        }
+
         this.breakpoints.delete(path);
     }
 
     public continue() {
-        this.godotCommands?.sendContinueCommand();
+        this.godotCommands.sendContinueCommand();
     }
 
-    public finish() {
-        if (this.connection) {
-            this.connection.end();
-        }
-    }
-
-    public getBreakPoints(path: string, line: number): number[] {
-        return [];
+    public getBreakPoints(path: string): GodotBreakpoint[] {
+        let bps = this.breakpoints.get(path);
+        return bps ? bps : [];
     }
 
     public getProject(): string {
@@ -117,15 +124,37 @@ export class GodotDebugRuntime extends EventEmitter {
             globals: any[];
         }) => void
     ) {
-        this.godotCommands?.sendGetScopesCommand(level);
+        this.godotCommands.sendGetScopesCommand(level);
         if (callback) {
             this.scopeCallbacks.push(callback);
         }
     }
 
+    public next() {
+        this.godotCommands.sendStepCommand();
+    }
+
+    public removeBreakpoint(pathTo: string, line: number) {
+        let bps = this.breakpoints.get(pathTo);
+        if (bps) {
+            let index = bps.findIndex((bp, i) => {
+                return bp.line === line;
+            });
+            if (index !== -1) {
+                let bp = bps[index];
+                bps.splice(index, 1);
+                this.breakpoints.set(pathTo, bps);
+                this.godotCommands.sendRemoveBreakpointCommand(
+                    bp.file.replace(new RegExp(`${this.project}/`), "res://"),
+                    bp.line
+                );
+            }
+        }
+    }
+
     public setBreakPoint(pathTo: string, line: number): GodotBreakpoint {
         const bp = {
-            verified: false,
+            verified: true,
             file: pathTo.replace(/\\/g, "/"),
             line: line,
             id: this.breakpointId++
@@ -139,12 +168,17 @@ export class GodotDebugRuntime extends EventEmitter {
 
         bps.push(bp);
 
-        this.verifyBreakpoints(bp.file);
+        this.sendEvent("breakpointValidated", bp);
+
+        if (bp.verified) {
+            this.godotCommands.sendSetBreakpointCommand(
+                bp.file.replace(new RegExp(`${this.project}/`), "res://"),
+                line
+            );
+        }
 
         return bp;
     }
-
-    public stack(startFrame: number, endFrame: number): any {}
 
     public start(project: string, address: string, port: number) {
         this.out = vscode.window.createOutputChannel("Godot");
@@ -160,11 +194,8 @@ export class GodotDebugRuntime extends EventEmitter {
 
         this.builder.registerCommand(
             new commands.Command("debug_enter", params => {
-                this.canContinue = params[0] as boolean;
-                this.broke = true;
-                this.brokenReason = params[1] as string;
-                if (params[1] === "Breakpoint") {
-                    this.godotCommands?.sendStackDumpCommand();
+                if (params[1] === "Breakpoint" || params[0]) {
+                    this.godotCommands.sendStackDumpCommand();
                 }
             })
         );
@@ -209,12 +240,12 @@ export class GodotDebugRuntime extends EventEmitter {
                 let members: any[] = [];
                 let globals: any[] = [];
 
-                let localCount = params[0] as number*2;
-                let memberCount = params[1 + localCount]*2;
-                let globalCount = params[2 + localCount + memberCount]*2;
+                let localCount = (params[0] as number) * 2;
+                let memberCount = params[1 + localCount] * 2;
+                let globalCount = params[2 + localCount + memberCount] * 2;
 
                 if (localCount > 0) {
-                    locals = params.slice(1, 1+localCount);
+                    locals = params.slice(1, 1 + localCount);
                 }
                 if (memberCount > 0) {
                     members = params.slice(
@@ -238,19 +269,16 @@ export class GodotDebugRuntime extends EventEmitter {
         );
 
         let server = net.createServer(connection => {
-            this.godotCommands = new GodotCommands(
-                this.builder,
-                this.parser,
-                connection
-            );
-
-            //----- Server responses -----
+            this.godotCommands.setConnection(connection);
 
             connection.on("data", buffer => {
                 let len = buffer.byteLength;
                 let offset = 0;
                 do {
-                    let data = this.parser.getBufferDataSet(buffer, offset);
+                    let data = this.commandParser.getBufferDataSet(
+                        buffer,
+                        offset
+                    );
                     let dataOffset = data[0] as number;
                     offset += dataOffset;
                     len -= dataOffset;
@@ -268,28 +296,42 @@ export class GodotDebugRuntime extends EventEmitter {
 
             connection.on("drain", () => {
                 connection.resume();
-                this.godotCommands?.setCanWrite(true);
+                this.godotCommands.setCanWrite(true);
             });
         });
 
         server.listen(this.port, this.address);
 
-        cp.exec(
+        this.godotExec = cp.exec(
             `godot --path ${project} --remote-debug ${address}:${port} ${this.buildBreakpointString()}`
         );
     }
 
     public step() {
-        this.sendEvent("step");
+        this.godotCommands.sendNextCommand();
+    }
+
+    public terminate() {
+        if (this.godotExec) {
+            terminate(this.godotExec.pid, (error: string | undefined) => {
+                if (error) {
+                    console.log(error);
+                } else {
+                    console.log("Debug end");
+                }
+            });
+        }
+        this.sendEvent("terminated", false);
+        this.connection?.end();
     }
 
     public triggerBreakpoint(stackFrames: GodotStackFrame[]) {
         this.sendEvent("stopOnBreakpoint", stackFrames);
     }
 
-    // #endregion Public Methods (12)
+    // #endregion Public Methods (14)
 
-    // #region Private Methods (8)
+    // #region Private Methods (3)
 
     private buildBreakpointString(): string {
         let output = "";
@@ -304,7 +346,7 @@ export class GodotDebugRuntime extends EventEmitter {
                             .relative(this.project, bp.file)
                             .replace(/\\/g, "/");
                         if (relativePath.length !== 0) {
-                            output += `res://${relativePath}:${bp.line + 1},`;
+                            output += `res://${relativePath}:${bp.line},`;
                         }
                     });
                 }
@@ -313,32 +355,6 @@ export class GodotDebugRuntime extends EventEmitter {
         }
 
         return output;
-    }
-
-    private isIndented(line: string): boolean {
-        let match = line.match(GodotDebugRuntime.INDENTED_REGEX);
-        if (match && match.length > 0) {
-            return true;
-        }
-        return false;
-    }
-
-    private isOnReady(line: string): boolean {
-        let match = line.match(GodotDebugRuntime.ONREADY_REGEX);
-        if (match && match.length > 0) {
-            return true;
-        }
-        return false;
-    }
-
-    private loadSource(file: string) {
-        let source = this.sourceLines.get(file);
-        if (!source) {
-            let sourceLines: string[] = readFileSync(file)
-                .toString()
-                .split("\n");
-            this.sourceLines.set(file, sourceLines);
-        }
     }
 
     private pumpScope(scopes: {
@@ -354,57 +370,11 @@ export class GodotDebugRuntime extends EventEmitter {
         }
     }
 
-    private seeksBackToFunction(path: string, line: number): boolean {
-        let source = this.sourceLines.get(path);
-        let newNumber = -1;
-        if (source) {
-            let count = line - 1;
-            let rSource = source.slice(0, count).reverse();
-
-            rSource.forEach(l => {
-                let match = l.match(GodotDebugRuntime.FUNCTION_REGEX);
-                if (match && match.length > 0) {
-                    newNumber = count;
-                    return;
-                }
-                count--;
-            });
-        }
-
-        return newNumber !== -1;
-    }
-
     private sendEvent(event: string, ...args: any[]) {
         setImmediate(_ => {
             this.emit(event, ...args);
         });
     }
 
-    private verifyBreakpoints(path: string): void {
-        let bps = this.breakpoints.get(path);
-        if (bps) {
-            this.loadSource(path);
-            let source = this.sourceLines.get(path);
-
-            bps.forEach(bp => {
-                if (source) {
-                    if (!bp.verified && bp.line < source.length) {
-                        const line = source[bp.line];
-                        const trimmed = line.trim();
-                        if (
-                            trimmed.length !== 0 &&
-                            ((this.isIndented(line) &&
-                                this.seeksBackToFunction(path, bp.line)) ||
-                                this.isOnReady(line))
-                        ) {
-                            bp.verified = true;
-                            this.sendEvent("breakpointValidated", bp);
-                        }
-                    }
-                }
-            });
-        }
-    }
-
-    // #endregion Private Methods (8)
+    // #endregion Private Methods (3)
 }

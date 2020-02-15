@@ -68,7 +68,7 @@
                 },
                 "initialConfigurations": [
                     {
-						"name": "Godot",
+                        "name": "Godot",
                         "type": "godot",
                         "request": "launch",
                         "project": "${workspaceFolder}",
@@ -133,6 +133,7 @@
     },
     "dependencies": {
         "await-notify": "^1.0.1",
+        "terminate": "^2.1.2",
         "vscode-debugadapter": "^1.38.0"
     }
 }

@@ -52,7 +52,7 @@ interface BufferModel {
 export class VariantParser {
     // #region Public Methods (3)
 
-    public decodeVariant(model: BufferModel) {        
+    public decodeVariant(model: BufferModel) {
         let type = this.decodeUInt32(model);
         switch (type & 0xff) {
             case GDScriptTypes.BOOL:
@@ -64,10 +64,9 @@ export class VariantParser {
                     return this.decodeInt32(model);
                 }
             case GDScriptTypes.REAL:
-                if(type & 1 << 16) {
+                if (type & (1 << 16)) {
                     return this.decodeDouble(model);
-                }
-                else {
+                } else {
                     return this.decodeFloat(model);
                 }
             case GDScriptTypes.STRING:
@@ -96,10 +95,9 @@ export class VariantParser {
                 return this.decodeNodePath(model);
             case GDScriptTypes.OBJECT:
                 if (type & (1 << 16)) {
-                    //TODO: Fix decodeObject(model)
                     return this.decodeObjectId(model);
                 } else {
-                    return this.decodeObjectId(model);
+                    return this.decodeObject(model);
                 }
             case GDScriptTypes.DICTIONARY:
                 return this.decodeDictionary(model);
@@ -193,7 +191,7 @@ export class VariantParser {
 
     // #endregion Public Methods (3)
 
-    // #region Private Methods (39)
+    // #region Private Methods (40)
 
     private decodeAABB(model: BufferModel) {
         let px = this.decodeFloat(model);
@@ -251,25 +249,25 @@ export class VariantParser {
 
         return output;
     }
-    
-    private decodeFloat(model: BufferModel) {
-        let view = new DataView(model.buffer.buffer, model.offset, 4);
-        let f = view.getFloat32(0, true);
-        
-        model.offset += 4;
-        model.len -= 4;
-        
-        return f;
-    }
 
     private decodeDouble(model: BufferModel) {
         let view = new DataView(model.buffer.buffer, model.offset, 8);
         let d = view.getFloat64(0, true);
-        
+
         model.offset += 8;
         model.len -= 8;
-        
+
         return d;
+    }
+
+    private decodeFloat(model: BufferModel) {
+        let view = new DataView(model.buffer.buffer, model.offset, 4);
+        let f = view.getFloat32(0, true);
+
+        model.offset += 4;
+        model.len -= 4;
+
+        return f;
     }
 
     private decodeInt32(model: BufferModel) {
@@ -327,7 +325,7 @@ export class VariantParser {
     }
 
     private decodeObjectId(model: BufferModel) {
-        return this.decodeUInt64(model);
+        return { id: this.decodeUInt64(model) };
     }
 
     private decodePlane(model: BufferModel) {
@@ -603,5 +601,5 @@ export class VariantParser {
         return size;
     }
 
-    // #endregion Private Methods (39)
+    // #endregion Private Methods (40)
 }

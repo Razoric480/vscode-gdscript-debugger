@@ -52,8 +52,4 @@ class GodotDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
             this.session
         );
     }
-    
-    dispose() {
-        this.session?.finish();
-    }
 }

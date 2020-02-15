@@ -75,19 +75,17 @@ export class GodotDebugSession extends LoggingDebugSession {
                 })
             );
         });
+        
+        this.runtime.on("terminated", restart => {
+            this.sendEvent(
+                new TerminatedEvent(restart)
+            );
+        });
     }
 
     // #endregion Constructors (1)
 
-    // #region Public Methods (1)
-
-    public finish() {
-        this.runtime.finish();
-    }
-
-    // #endregion Public Methods (1)
-
-    // #region Protected Methods (16)
+    // #region Protected Methods (17)
 
     protected breakpointLocationsRequest(
         response: DebugProtocol.BreakpointLocationsResponse,
@@ -127,15 +125,12 @@ export class GodotDebugSession extends LoggingDebugSession {
         this.sendResponse(response);
     }
 
-    protected dataBreakpointInfoRequest(
-        response: DebugProtocol.DataBreakpointInfoResponse,
-        args: DebugProtocol.DataBreakpointInfoArguments
-    ): void {}
-
     protected evaluateRequest(
         response: DebugProtocol.EvaluateResponse,
         args: DebugProtocol.EvaluateArguments
-    ): void {}
+    ): void {
+        let breakhere = 10;
+    }
 
     protected initializeRequest(
         response: DebugProtocol.InitializeResponse,
@@ -145,7 +140,25 @@ export class GodotDebugSession extends LoggingDebugSession {
 
         response.body.supportsConfigurationDoneRequest = true;
         response.body.supportsEvaluateForHovers = true;
-        response.body.supportsBreakpointLocationsRequest = true;
+        response.body.supportsStepBack = false;
+        response.body.supportsBreakpointLocationsRequest = false;
+        response.body.supportsCancelRequest = false;
+        response.body.supportsCompletionsRequest = false;
+        response.body.supportsConditionalBreakpoints = false;
+        response.body.supportsDataBreakpoints = false;
+        response.body.supportsFunctionBreakpoints = false;
+        response.body.supportsGotoTargetsRequest = false;
+        response.body.supportsHitConditionalBreakpoints = false;
+        response.body.supportsLogPoints = false;
+        response.body.supportsModulesRequest = false;
+        response.body.supportsReadMemoryRequest = false;
+        response.body.supportsRestartFrame = false;
+        response.body.supportsRestartRequest = false;
+        response.body.supportsSetExpression = false;
+        response.body.supportsSetVariable = false;
+        response.body.supportsStepInTargetsRequest = false;
+        response.body.supportsTerminateThreadsRequest = false;
+        response.body.supportsTerminateRequest = true;
 
         this.sendResponse(response);
 
@@ -164,7 +177,19 @@ export class GodotDebugSession extends LoggingDebugSession {
     protected nextRequest(
         response: DebugProtocol.NextResponse,
         args: DebugProtocol.NextArguments
-    ): void {}
+    ): void {
+        this.runtime.step();
+        this.sendResponse(response);
+    }
+
+    protected pauseRequest(
+        response: DebugProtocol.PauseResponse,
+        args: DebugProtocol.PauseArguments,
+        request?: DebugProtocol.PauseRequest
+    ): void {
+        this.runtime.break();
+        this.sendResponse(response);
+    }
 
     protected scopesRequest(
         response: DebugProtocol.ScopesResponse,
@@ -226,29 +251,44 @@ export class GodotDebugSession extends LoggingDebugSession {
         response: DebugProtocol.SetBreakpointsResponse,
         args: DebugProtocol.SetBreakpointsArguments
     ): void {
-        const path = args.source.path as string;
+        const path = (args.source.path as string).replace(/\\/g, "/");
         const clientLines = args.lines || [];
 
         if (fs.existsSync(path)) {
-            this.runtime.clearBreakpoints(path);
+            let bps = this.runtime.getBreakPoints(path);
+            let bpLines = bps.map(bp => bp.line);
 
-            const actualBreakPoints = clientLines.map(l => {
-                let { verified, file, line, id } = this.runtime.setBreakPoint(
-                    path,
-                    this.convertClientLineToDebugger(l)
-                );
-                const bp = new Breakpoint(
-                    verified,
-                    this.convertDebuggerLineToClient(line)
-                );
+            bps.forEach(bp => {
+                if (clientLines.indexOf(bp.line) === -1) {
+                    this.runtime.removeBreakpoint(path, bp.line);
+                }
             });
+            clientLines.forEach(l => {
+                if (bpLines.indexOf(l) === -1) {
+                    this.runtime.setBreakPoint(path, l);
+                }
+            });
+
+            bps = this.runtime.getBreakPoints(path);
+
+            response.body = {
+                breakpoints: bps.map(bp => {
+                    return new Breakpoint(
+                        bp.verified,
+                        bp.line,
+                        1,
+                        new Source(
+                            bp.file.split("/").reverse()[0],
+                            bp.file,
+                            bp.id
+                        )
+                    );
+                })
+            };
+
+            this.sendResponse(response);
         }
     }
-
-    protected setDataBreakpointRequest(
-        response: DebugProtocol.SetDataBreakpointsResponse,
-        args: DebugProtocol.SetDataBreakpointsArguments
-    ): void {}
 
     protected stackTraceRequest(
         response: DebugProtocol.StackTraceResponse,
@@ -277,6 +317,22 @@ export class GodotDebugSession extends LoggingDebugSession {
         this.sendResponse(response);
     }
 
+    protected stepInRequest(
+        response: DebugProtocol.StepInResponse,
+        args: DebugProtocol.StepInArguments
+    ) {
+        this.runtime.next();
+        this.sendResponse(response);
+    }
+
+    protected terminateRequest(
+        response: DebugProtocol.TerminateResponse,
+        args: DebugProtocol.TerminateArguments
+    ) {
+        this.runtime.terminate();
+        this.sendResponse(response);
+    }
+
     protected threadsRequest(response: DebugProtocol.ThreadsResponse): void {
         response.body = {
             threads: [new Thread(GodotDebugSession.THREAD_ID, "thread_1")]
@@ -295,7 +351,12 @@ export class GodotDebugSession extends LoggingDebugSession {
             scoped.forEach(s => {
                 let value: any;
                 if (typeof s.value === "number" && !Number.isInteger(s.value)) {
-                    value = noExponents(s.value);
+                    value = +Number.parseFloat(noExponents(s.value)).toFixed(4);
+                } else if (typeof s.value === "object") {
+                    value = JSON.stringify(s.value, undefined, " ").replace(
+                        /(\n|\r|\r\n)/g,
+                        ""
+                    );
                 } else {
                     value = s.value;
                 }
@@ -314,7 +375,7 @@ export class GodotDebugSession extends LoggingDebugSession {
         }
     }
 
-    // #endregion Protected Methods (16)
+    // #endregion Protected Methods (17)
 }
 
 function noExponents(value: number): string {
