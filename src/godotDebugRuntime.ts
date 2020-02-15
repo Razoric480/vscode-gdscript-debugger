@@ -19,7 +19,7 @@ export interface GodotBreakpoint {
     // #endregion Properties (4)
 }
 
-export interface GodotStackframe {
+export interface GodotStackFrame {
     // #region Properties (4)
 
     file: string;
@@ -31,7 +31,7 @@ export interface GodotStackframe {
 }
 
 export class GodotDebugRuntime extends EventEmitter {
-    // #region Properties (16)
+    // #region Properties (19)
 
     private static FUNCTION_REGEX = /^[^#]*?func[ \t]+?/;
     private static INDENTED_REGEX = /^[ \t]+?/;
@@ -46,15 +46,19 @@ export class GodotDebugRuntime extends EventEmitter {
     private builder = new commands.CommandBuilder();
     private canContinue = true;
     private connection: net.Socket | undefined;
+    private godotCommands: GodotCommands | undefined;
+    private out: vscode.OutputChannel | undefined;
     private parser = new VariantParser();
     private port = 6007;
     private project = "";
+    private scopeCallbacks: ((scopes: {
+        locals: any[];
+        members: any[];
+        globals: any[];
+    }) => void)[] = [];
     private sourceLines = new Map<string, string[]>();
-    private godotCommands: GodotCommands | undefined;
 
-    private out: vscode.OutputChannel | undefined;
-
-    // #endregion Properties (16)
+    // #endregion Properties (19)
 
     // #region Constructors (1)
 
@@ -88,7 +92,7 @@ export class GodotDebugRuntime extends EventEmitter {
     }
 
     public continue() {
-        this.sendEvent("continue");
+        this.godotCommands?.sendContinueCommand();
     }
 
     public finish() {
@@ -103,6 +107,20 @@ export class GodotDebugRuntime extends EventEmitter {
 
     public getProject(): string {
         return this.project;
+    }
+
+    public getScope(
+        level: number,
+        callback?: (scopes: {
+            locals: any[];
+            members: any[];
+            globals: any[];
+        }) => void
+    ) {
+        this.godotCommands?.sendGetScopesCommand(level);
+        if (callback) {
+            this.scopeCallbacks.push(callback);
+        }
     }
 
     public setBreakPoint(pathTo: string, line: number): GodotBreakpoint {
@@ -146,8 +164,7 @@ export class GodotDebugRuntime extends EventEmitter {
                 this.broke = true;
                 this.brokenReason = params[1] as string;
                 if (params[1] === "Breakpoint") {
-                    // this.godotCommands?.sendStackDumpCommand();
-                    this.godotCommands?.sendGetScopesCommand(0);
+                    this.godotCommands?.sendStackDumpCommand();
                 }
             })
         );
@@ -188,7 +205,35 @@ export class GodotDebugRuntime extends EventEmitter {
 
         this.builder.registerCommand(
             new commands.Command("stack_frame_vars", params => {
-                let breakthishere = 10;
+                let locals: any[] = [];
+                let members: any[] = [];
+                let globals: any[] = [];
+
+                let localCount = params[0] as number*2;
+                let memberCount = params[1 + localCount]*2;
+                let globalCount = params[2 + localCount + memberCount]*2;
+
+                if (localCount > 0) {
+                    locals = params.slice(1, 1+localCount);
+                }
+                if (memberCount > 0) {
+                    members = params.slice(
+                        2 + localCount,
+                        2 + localCount + memberCount
+                    );
+                }
+                if (globalCount > 0) {
+                    globals = params.slice(
+                        3 + localCount + memberCount,
+                        3 + localCount + memberCount + globalCount
+                    );
+                }
+
+                this.pumpScope({
+                    locals: locals,
+                    members: members,
+                    globals: globals
+                });
             })
         );
 
@@ -238,13 +283,13 @@ export class GodotDebugRuntime extends EventEmitter {
         this.sendEvent("step");
     }
 
-    public triggerBreakpoint(stackFrames: GodotStackframe[]) {
+    public triggerBreakpoint(stackFrames: GodotStackFrame[]) {
         this.sendEvent("stopOnBreakpoint", stackFrames);
     }
 
     // #endregion Public Methods (12)
 
-    // #region Private Methods (7)
+    // #region Private Methods (8)
 
     private buildBreakpointString(): string {
         let output = "";
@@ -296,14 +341,27 @@ export class GodotDebugRuntime extends EventEmitter {
         }
     }
 
+    private pumpScope(scopes: {
+        locals: any[];
+        members: any[];
+        globals: any[];
+    }) {
+        if (this.scopeCallbacks.length > 0) {
+            let cb = this.scopeCallbacks.shift();
+            if (cb) {
+                cb(scopes);
+            }
+        }
+    }
+
     private seeksBackToFunction(path: string, line: number): boolean {
         let source = this.sourceLines.get(path);
         let newNumber = -1;
         if (source) {
             let count = line - 1;
-            let rsource = source.slice(0, count).reverse();
+            let rSource = source.slice(0, count).reverse();
 
-            rsource.forEach(l => {
+            rSource.forEach(l => {
                 let match = l.match(GodotDebugRuntime.FUNCTION_REGEX);
                 if (match && match.length > 0) {
                     newNumber = count;
@@ -348,5 +406,5 @@ export class GodotDebugRuntime extends EventEmitter {
         }
     }
 
-    // #endregion Private Methods (7)
+    // #endregion Private Methods (8)
 }

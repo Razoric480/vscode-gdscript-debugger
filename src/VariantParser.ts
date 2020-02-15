@@ -1,6 +1,3 @@
-import { X_OK } from "constants";
-import { Z_ASCII } from "zlib";
-
 enum GDScriptTypes {
     NIL,
 
@@ -55,9 +52,9 @@ interface BufferModel {
 export class VariantParser {
     // #region Public Methods (3)
 
-    public decodeVariant(model: BufferModel) {
-        let type = this.decodeUInt32(model) & 0xff;
-        switch (type) {
+    public decodeVariant(model: BufferModel) {        
+        let type = this.decodeUInt32(model);
+        switch (type & 0xff) {
             case GDScriptTypes.BOOL:
                 return this.decodeUInt32(model) !== 0;
             case GDScriptTypes.INT:
@@ -94,7 +91,8 @@ export class VariantParser {
                 return this.decodeNodePath(model);
             case GDScriptTypes.OBJECT:
                 if (type & (1 << 16)) {
-                    return this.decodeObject(model);
+                    //TODO: Fix decodeObject(model)
+                    return this.decodeObjectId(model);
                 } else {
                     return this.decodeObjectId(model);
                 }
@@ -190,7 +188,7 @@ export class VariantParser {
 
     // #endregion Public Methods (3)
 
-    // #region Private Methods (37)
+    // #region Private Methods (39)
 
     private decodeAABB(model: BufferModel) {
         let px = this.decodeFloat(model);
@@ -249,32 +247,62 @@ export class VariantParser {
         return output;
     }
 
+    //TODO: Fix floating point parsing
     private decodeFloat(model: BufferModel) {
-        let f = model.buffer.readDoubleLE(model.offset);
+        let buffer = new ArrayBuffer(8);
+        let bytes = new Uint8Array(buffer);
+        let slice = model.buffer.slice(model.offset, model.offset+8);
+        for (let i = 0; i < slice.length; i++) {
+            const byte = slice[i];
+            bytes[i] = byte;
+        }
+        let view = new DataView(buffer);
+        let f = view.getFloat64(0, false);
+        model.offset += 8;
+        model.len -= 8;
+
+        return 0.0;
+    }
+
+    private decodeInt32(model: BufferModel) {
+        let u = model.buffer.readInt32LE(model.offset);
+        model.len -= 4;
+        model.offset += 4;
+
+        return u;
+    }
+
+    private decodeInt64(model: BufferModel) {
+        let u = model.buffer.readBigInt64LE(model.offset);
         model.len -= 8;
         model.offset += 8;
 
-        return f;
+        return u;
     }
 
     private decodeNodePath(model: BufferModel) {
-        let nameCount = this.decodeUInt32(model) & 0x80000000;
-        let subnameCount = this.decodeUInt32(model);
-        let isAbsolute = (this.decodeUInt32(model) & 1) === 1;
+        let nameCount = this.decodeUInt32(model) & 0x7fffffff;
+        let subNameCount = this.decodeUInt32(model);
+        let flags = this.decodeUInt32(model);
+        let isAbsolute = (flags & 1) === 1;
+        if (flags & 2) {
+            //Obsolete format with property separate from subPath
+            subNameCount++;
+        }
 
-        let total = nameCount + subnameCount;
+        let total = nameCount + subNameCount;
         let names: string[] = [];
-        let subnames: string[] = [];
+        let subNames: string[] = [];
         for (let i = 0; i < total; i++) {
             let str = this.decodeString(model);
             if (i < nameCount) {
                 names.push(str);
             } else {
-                subnames.push(str);
+                subNames.push(str);
             }
         }
 
-        return `${names.join("/")}:${subnames.join(":")}`;
+        return { path: names, subpath: subNames, absolute: isAbsolute };
     }
 
     private decodeObject(model: BufferModel) {
@@ -387,10 +415,10 @@ export class VariantParser {
     private decodeRect2(model: BufferModel) {
         let x = this.decodeFloat(model);
         let y = this.decodeFloat(model);
-        let sizex = this.decodeFloat(model);
-        let sizey = this.decodeFloat(model);
+        let sizeX = this.decodeFloat(model);
+        let sizeY = this.decodeFloat(model);
 
-        return { position: { x: x, y: y }, size: { x: sizex, y: sizey } };
+        return { position: { x: x, y: y }, size: { x: sizeX, y: sizeY } };
     }
 
     private decodeString(model: BufferModel) {
@@ -438,22 +466,6 @@ export class VariantParser {
 
     private decodeUInt64(model: BufferModel) {
         let u = model.buffer.readBigUInt64LE(model.offset);
-        model.len -= 8;
-        model.offset += 8;
-
-        return u;
-    }
-
-    private decodeInt32(model: BufferModel) {
-        let u = model.buffer.readInt32LE(model.offset);
-        model.len -= 4;
-        model.offset += 4;
-
-        return u;
-    }
-
-    private decodeInt64(model: BufferModel) {
-        let u = model.buffer.readBigInt64LE(model.offset);
         model.len -= 8;
         model.offset += 8;
 
@@ -583,5 +595,5 @@ export class VariantParser {
         return size;
     }
 
-    // #endregion Private Methods (37)
+    // #endregion Private Methods (39)
 }
