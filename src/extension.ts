@@ -23,6 +23,8 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.debug.registerDebugAdapterDescriptorFactory("godot", factory)
     );
+    
+    context.subscriptions.push(factory);
 }
 
 export function deactivate() {}
@@ -51,5 +53,9 @@ class GodotDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
         return new vscode.DebugAdapterInlineImplementation(
             this.session
         );
+    }
+    
+    dispose() {
+        this.session = undefined;
     }
 }

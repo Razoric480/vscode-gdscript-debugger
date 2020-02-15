@@ -45,6 +45,7 @@ export class GodotDebugRuntime extends EventEmitter {
     private paused = false;
     private port = 6007;
     private project = "";
+    private server: net.Server | undefined;
     private scopeCallbacks: ((scopes: {
         locals: any[];
         members: any[];
@@ -69,38 +70,6 @@ export class GodotDebugRuntime extends EventEmitter {
         } else {
             this.godotCommands.sendBreakCommand();
         }
-    }
-
-    public clearBreakPoint(
-        path: string,
-        line: number
-    ): GodotBreakpoint | undefined {
-        let bps = this.breakpoints.get(path);
-        if (bps) {
-            const index = bps.findIndex(bp => bp.line === line);
-            if (index >= 0) {
-                const bp = bps[index];
-                bps.slice(index, 1);
-                return bp;
-            }
-        }
-
-        return undefined;
-    }
-
-    public clearBreakpoints(path: string): void {
-        let bps = this.breakpoints.get(path);
-        if (bps) {
-            bps.forEach(bp => {
-                let filePath = bp.file;
-                this.godotCommands.sendRemoveBreakpointCommand(
-                    bp.file,
-                    bp.line
-                );
-            });
-        }
-
-        this.breakpoints.delete(path);
     }
 
     public continue() {
@@ -268,7 +237,8 @@ export class GodotDebugRuntime extends EventEmitter {
             })
         );
 
-        let server = net.createServer(connection => {
+        this.server = net.createServer(connection => {
+            this.connection = connection;
             this.godotCommands.setConnection(connection);
 
             connection.on("data", buffer => {
@@ -286,7 +256,14 @@ export class GodotDebugRuntime extends EventEmitter {
                 } while (len > 0);
             });
 
-            connection.on("close", hadError => {});
+            connection.on("close", hadError => {
+                if (hadError) {
+                    console.log("Errored out");
+                } else {
+                    console.log("closed");
+                }
+                connection.destroy();
+            });
 
             connection.on("end", () => {});
 
@@ -300,7 +277,7 @@ export class GodotDebugRuntime extends EventEmitter {
             });
         });
 
-        server.listen(this.port, this.address);
+        this.server?.listen(this.port, this.address);
 
         this.godotExec = cp.exec(
             `godot --path ${project} --remote-debug ${address}:${port} ${this.buildBreakpointString()}`
@@ -312,17 +289,17 @@ export class GodotDebugRuntime extends EventEmitter {
     }
 
     public terminate() {
-        if (this.godotExec) {
-            terminate(this.godotExec.pid, (error: string | undefined) => {
+        this.connection?.end(() => {
+            this.server?.close();
+            terminate(this.godotExec?.pid, (error: string | undefined) => {
                 if (error) {
                     console.log(error);
                 } else {
                     console.log("Debug end");
                 }
             });
-        }
+        });
         this.sendEvent("terminated", false);
-        this.connection?.end();
     }
 
     public triggerBreakpoint(stackFrames: GodotStackFrame[]) {
