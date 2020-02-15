@@ -64,7 +64,12 @@ export class VariantParser {
                     return this.decodeInt32(model);
                 }
             case GDScriptTypes.REAL:
-                return this.decodeFloat(model);
+                if(type & 1 << 16) {
+                    return this.decodeDouble(model);
+                }
+                else {
+                    return this.decodeFloat(model);
+                }
             case GDScriptTypes.STRING:
                 return this.decodeString(model);
             case GDScriptTypes.VECTOR2:
@@ -246,22 +251,25 @@ export class VariantParser {
 
         return output;
     }
-
-    //TODO: Fix floating point parsing
+    
     private decodeFloat(model: BufferModel) {
-        let buffer = new ArrayBuffer(8);
-        let bytes = new Uint8Array(buffer);
-        let slice = model.buffer.slice(model.offset, model.offset+8);
-        for (let i = 0; i < slice.length; i++) {
-            const byte = slice[i];
-            bytes[i] = byte;
-        }
-        let view = new DataView(buffer);
-        let f = view.getFloat64(0, false);
+        let view = new DataView(model.buffer.buffer, model.offset, 4);
+        let f = view.getFloat32(0, true);
+        
+        model.offset += 4;
+        model.len -= 4;
+        
+        return f;
+    }
+
+    private decodeDouble(model: BufferModel) {
+        let view = new DataView(model.buffer.buffer, model.offset, 8);
+        let d = view.getFloat64(0, true);
+        
         model.offset += 8;
         model.len -= 8;
-
-        return 0.0;
+        
+        return d;
     }
 
     private decodeInt32(model: BufferModel) {
