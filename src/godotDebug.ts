@@ -17,6 +17,7 @@ import {
 } from "./godotDebugRuntime";
 const { Subject } = require("await-notify");
 import fs = require("fs");
+import { VariableScope } from "./VariableScope";
 
 interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
     // #region Properties (3)
@@ -34,12 +35,10 @@ export class GodotDebugSession extends LoggingDebugSession {
     private static THREAD_ID = 1;
 
     private configurationDone = new Subject();
-    private lastFrames: GodotStackFrame[] | undefined;
+    private lastFrames: GodotStackFrame[] = [];
     private runtime: GodotDebugRuntime;
     private scopeId = 1;
-    private scopes: { name: string; value: any }[][] = [
-        [{ name: "filler", value: 0 }]
-    ];
+    private scopes = new Map<string, VariableScope[]>();
 
     // #endregion Properties (6)
 
@@ -179,56 +178,86 @@ export class GodotDebugSession extends LoggingDebugSession {
         response: DebugProtocol.ScopesResponse,
         args: DebugProtocol.ScopesArguments
     ): void {
-        this.runtime.getScope(args.frameId, scopes => {
-            let localScope: DebugProtocol.Scope = {
-                name: "Locals",
-                namedVariables: scopes.locals.length / 2,
-                presentationHint: "locals",
-                expensive: false,
-                variablesReference: this.scopeId++
-            };
-            let localScopeValues: { name: string; value: any }[] = [];
-            for (let i = 0; i < scopes.locals.length; i += 2) {
-                const name = scopes.locals[i];
-                const value = scopes.locals[i + 1];
-                localScopeValues.push({ name: name, value: value });
-            }
-            this.scopes.push(localScopeValues);
-            let memberScope: DebugProtocol.Scope = {
-                name: "Members",
-                namedVariables: scopes.members.length / 2,
-                presentationHint: "locals",
-                expensive: false,
-                variablesReference: this.scopeId++
-            };
-            let memberScopeValues: { name: string; value: any }[] = [];
-            for (let i = 0; i < scopes.members.length; i += 2) {
-                const name = scopes.members[i];
-                const value = scopes.members[i + 1];
-                memberScopeValues.push({ name: name, value: value });
-            }
-            this.scopes.push(memberScopeValues);
-            let globalScope: DebugProtocol.Scope = {
-                name: "Globals",
-                namedVariables: scopes.globals.length / 2,
-                presentationHint: "locals",
-                expensive: false,
-                variablesReference: this.scopeId++
-            };
-            let globalScopeValues: { name: string; value: any }[] = [];
-            for (let i = 0; i < scopes.globals.length; i += 2) {
-                const name = scopes.globals[i];
-                const value = scopes.globals[i + 1];
-                globalScopeValues.push({ name: name, value: value });
-            }
-            this.scopes.push(globalScopeValues);
+        this.runtime.getScope(
+            args.frameId,
+            (stackLevel, stackFiles, scopes) => {
+                let file = stackFiles[stackLevel];
+                let fileScopes = this.scopes.get(file);
 
-            response.body = {
-                scopes: [localScope, memberScope, globalScope]
-            };
+                let localScope: VariableScope;
+                let memberScope: VariableScope;
+                let globalScope: VariableScope;
 
-            this.sendResponse(response);
-        });
+                if (!fileScopes) {
+                    fileScopes = [];
+
+                    localScope = new VariableScope(this.scopeId++);
+                    memberScope = new VariableScope(this.scopeId++);
+                    globalScope = new VariableScope(this.scopeId++);
+
+                    fileScopes.push(localScope);
+                    fileScopes.push(memberScope);
+                    fileScopes.push(globalScope);
+
+                    this.scopes.set(file, fileScopes);
+                } else {
+                    localScope = fileScopes[0];
+                    memberScope = fileScopes[1];
+                    globalScope = fileScopes[2];
+                }
+
+                let outLocalScope: DebugProtocol.Scope = {
+                    name: "Locals",
+                    namedVariables: scopes.locals.length / 2,
+                    presentationHint: "locals",
+                    expensive: false,
+                    variablesReference: localScope.id
+                };
+
+                for (let i = 0; i < scopes.locals.length; i += 2) {
+                    const name = scopes.locals[i];
+                    const value = scopes.locals[i + 1];
+
+                    this.drillScope(localScope, { name: name, value: value });
+                }
+
+                let outMemberScope: DebugProtocol.Scope = {
+                    name: "Members",
+                    namedVariables: scopes.members.length / 2,
+                    presentationHint: "locals",
+                    expensive: false,
+                    variablesReference: memberScope.id
+                };
+
+                for (let i = 0; i < scopes.members.length; i += 2) {
+                    const name = scopes.members[i];
+                    const value = scopes.members[i + 1];
+
+                    this.drillScope(memberScope, { name: name, value: value });
+                }
+
+                let outGlobalScope: DebugProtocol.Scope = {
+                    name: "Globals",
+                    namedVariables: scopes.globals.length / 2,
+                    presentationHint: "locals",
+                    expensive: false,
+                    variablesReference: globalScope.id
+                };
+
+                for (let i = 0; i < scopes.globals.length; i += 2) {
+                    const name = scopes.globals[i];
+                    const value = scopes.globals[i + 1];
+
+                    this.drillScope(globalScope, { name: name, value: value });
+                }
+
+                response.body = {
+                    scopes: [outLocalScope, outMemberScope, outGlobalScope]
+                };
+
+                this.sendResponse(response);
+            }
+        );
     }
 
     protected setBreakPointsRequest(
@@ -324,50 +353,206 @@ export class GodotDebugSession extends LoggingDebugSession {
         this.sendResponse(response);
     }
 
-    //TODO: Arrays coming up as objects?
     protected async variablesRequest(
         response: DebugProtocol.VariablesResponse,
         args: DebugProtocol.VariablesArguments,
         request?: DebugProtocol.Request
     ) {
-        let scoped = this.scopes[args.variablesReference];
-        if (scoped) {
-            response.body = {
-                variables: scoped.map(s => {
-                    let value: any;
-                    if (
-                        typeof s.value === "number" &&
-                        !Number.isInteger(s.value)
-                    ) {
-                        value = +Number.parseFloat(
-                            noExponents(s.value)
-                        ).toFixed(4);
-                    } else if (typeof s.value === "object") {
-                        value = JSON.stringify(s.value, undefined, " ")
-                            .replace(/"(.*?)": /g, "$1: ")
-                            .replace(/\n/g, "")
-                            .replace(/\}$/, " }");
-                        if (s.value.type) {
-                            value = value.replace(/type: ".*?", /, "");
-                            value = `${s.value.type} ${value}`;
-                        }
-                    } else {
-                        value = s.value;
-                    }
+        let outId = args.variablesReference;
+        let files = Array.from(this.scopes.keys());
+        let isScope = false;
+        let outScope: VariableScope | undefined;
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
 
-                    return {
-                        name: s.name,
-                        value: `${value}`,
-                        variablesReference: 0
-                    };
-                })
-            };
+            let scopes = this.scopes.get(file);
+            if (scopes) {
+                let index = scopes.findIndex((s, i) => {
+                    return s.id === outId;
+                });
+                if (index !== -1) {
+                    outScope = scopes[index];
+                    isScope = true;
+                    break;
+                } else {
+                    for (let l = 0; l < scopes.length; l++) {
+                        const scope = scopes[l];
+                        let ids = scope.getVariableIds();
+                        for (let k = 0; k < ids.length; k++) {
+                            const id = ids[k];
+                            if (id === outId) {
+                                outScope = scope;
+                                isScope = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (outScope) {
+            if (isScope) {
+                let varIds = outScope.getVariableIds();
+                response.body = {
+                    variables: []
+                };
+
+                varIds.forEach(id => {
+                    let variable = outScope?.getVariable(id);
+                    if (variable && variable.name.indexOf(".") === -1) {
+                        let refId = 0;
+                        let value = "";
+                        if (
+                            typeof variable.value === "number" &&
+                            !Number.isInteger(variable.value)
+                        ) {
+                            value = String(+Number.parseFloat(
+                                noExponents(variable.value)
+                            ).toFixed(6));
+                        } else if (typeof variable.value === "object") {
+                            refId = id;
+                            if (variable.value.type) {
+                                value = variable.value.type;
+                            } else {
+                                value = "Object";
+                            }
+                        } else {
+                            if(variable.value) {
+                                value = String(variable.value);
+                            }
+                            else {
+                                value = Number.isInteger(variable.value) ? "0" : "null";
+                            }
+                        }
+                        response.body.variables.push({
+                            name: variable.name,
+                            value: value,
+                            variablesReference: refId
+                        });
+                    }
+                });
+            } else {
+                let variable = outScope.getVariable(outId);
+                if (variable) {
+                    let subVariables = outScope.getSubVariablesFor(outId);
+                    let varRef = 0;
+                    if (subVariables) {
+                        let ids = outScope.getVariableIds();
+                        let pathTo = variable.name;
+                        response.body = {
+                            variables: []
+                        };
+
+                        subVariables.forEach(sv => {
+                            let name = sv.name;
+                            let idIndex = ids.findIndex(id => {
+                                let variable = outScope?.getVariable(id);
+                                return (
+                                    variable &&
+                                    name.indexOf(pathTo) !== -1
+                                );
+                            });
+                            
+                            let value = "";
+                            let refId = 0;
+                            if (
+                                typeof sv.value === "number" &&
+                                !Number.isInteger(sv.value)
+                            ) {
+                                value = String(+Number.parseFloat(
+                                    noExponents(sv.value)
+                                ).toFixed(6));
+                            } else if (typeof sv.value === "object") {
+                                refId = ids[idIndex];
+                                if (sv.value.type) {
+                                    value = sv.value.type;
+                                } else {
+                                    value = "Object";
+                                }
+                            } else {
+                                if(sv.value) {
+                                    value = String(sv.value);
+                                }
+                                else {
+                                    value = Number.isInteger(sv.value) ? "0" : "null";
+                                }
+                            }
+
+                            response.body.variables.push({
+                                name: name.replace(/([a-zA-Z_]+?\.)*/g, ""),
+                                value: value,
+                                variablesReference: refId
+                            });
+                        });
+                    } else {
+                        response.body = {
+                            variables: [
+                                {
+                                    name: variable.name.replace(
+                                        /([a-zA-Z_]+?\.)*/g,
+                                        ""
+                                    ),
+                                    value:
+                                        typeof variable.value === "object"
+                                            ? variable.value.type
+                                            : variable.value,
+                                    variablesReference: 0
+                                }
+                            ]
+                        };
+                    }
+                } else {
+                    response.body = { variables: [] };
+                }
+            }
 
             this.sendResponse(response);
         }
     }
 
     // #endregion Protected Methods (16)
+
+    // #region Private Methods (1)
+
+    private drillScope(scope: VariableScope, variable: any) {
+        let id = scope.getIdFor(variable.name);
+        if (id === -1) {
+            id = this.scopeId++;
+        }
+        scope.setVariable(variable.name, variable.value, id);
+        if (typeof variable.value === "object") {
+            for (const property in variable.value) {
+                if (property !== "type") {
+                    let subVars = scope.getSubVariablesFor(id);
+                    let subId = 0;
+                    let name = `${variable.name}.${property}`;
+                    if (subVars) {
+                        subId = subVars?.findIndex((sv, i) => {
+                            return name === sv.name;
+                        });
+                        if (subId === -1) {
+                            subId = this.scopeId++;
+                        }
+                    } else {
+                        subId = this.scopeId++;
+                    }
+                    scope.setSubVariableFor(
+                        id,
+                        name,
+                        variable.value[property],
+                        subId
+                    );
+                    this.drillScope(scope, {
+                        name: name,
+                        value: variable.value[property]
+                    });
+                }
+            }
+        }
+    }
+
+    // #endregion Private Methods (1)
 }
 
 function noExponents(value: number): string {

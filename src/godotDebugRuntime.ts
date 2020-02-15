@@ -31,7 +31,7 @@ export interface GodotStackFrame {
 }
 
 export class GodotDebugRuntime extends EventEmitter {
-    // #region Properties (14)
+    // #region Properties (16)
 
     private address = "127.0.0.1";
     private breakpointId = 0;
@@ -45,14 +45,20 @@ export class GodotDebugRuntime extends EventEmitter {
     private paused = false;
     private port = 6007;
     private project = "";
-    private scopeCallbacks: ((scopes: {
-        locals: any[];
-        members: any[];
-        globals: any[];
-    }) => void)[] = [];
+    private scopeCallbacks: ((
+        stackLevel: number,
+        stackFiles: string[],
+        scopes: {
+            locals: { name: string; value: any }[];
+            members: { name: string; value: any }[];
+            globals: { name: string; value: any }[];
+        }
+    ) => void)[] = [];
     private server: net.Server | undefined;
+    private stackFiles: string[] = [];
+    private stackLevel = 0;
 
-    // #endregion Properties (14)
+    // #endregion Properties (16)
 
     // #region Constructors (1)
 
@@ -87,13 +93,18 @@ export class GodotDebugRuntime extends EventEmitter {
 
     public getScope(
         level: number,
-        callback?: (scopes: {
-            locals: any[];
-            members: any[];
-            globals: any[];
-        }) => void
+        callback?: (
+            stackLevel: number,
+            stackFiles: string[],
+            scopes: {
+                locals: { name: string; value: any }[];
+                members: { name: string; value: any }[];
+                globals: { name: string; value: any }[];
+            }
+        ) => void
     ) {
-        this.godotCommands.sendGetScopesCommand(level);
+        this.godotCommands.sendStackFrameVarsCommand(level);
+        this.stackLevel = level;
         if (callback) {
             this.scopeCallbacks.push(callback);
         }
@@ -204,8 +215,7 @@ export class GodotDebugRuntime extends EventEmitter {
         );
 
         this.builder.registerCommand(
-            new commands.Command("message:inspect_object", params => {
-            })
+            new commands.Command("message:inspect_object", params => {})
         );
 
         this.builder.registerCommand(
@@ -305,6 +315,9 @@ export class GodotDebugRuntime extends EventEmitter {
     }
 
     public triggerBreakpoint(stackFrames: GodotStackFrame[]) {
+        this.stackFiles = stackFrames.map(sf => {
+            return sf.file;
+        });
         this.sendEvent("stopOnBreakpoint", stackFrames);
     }
 
@@ -344,7 +357,10 @@ export class GodotDebugRuntime extends EventEmitter {
         if (this.scopeCallbacks.length > 0) {
             let cb = this.scopeCallbacks.shift();
             if (cb) {
-                cb(scopes);
+                let stackFiles = this.stackFiles.map(sf => {
+                    return sf.replace("res://", `${this.project}/`);
+                });
+                cb(this.stackLevel, stackFiles, scopes);
             }
         }
     }

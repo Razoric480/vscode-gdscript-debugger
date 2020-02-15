@@ -43,7 +43,7 @@ export class GodotCommands {
         this.addAndSend(buffer);
     }
 
-    public sendGetScopesCommand(level: number) {
+    public sendStackFrameVarsCommand(level: number) {
         let buffer = this.builder.createBufferedCommand(
             "get_stack_frame_vars",
             this.parser,
