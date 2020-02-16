@@ -223,10 +223,9 @@ export class ServerController {
 
         this.server?.listen(port, address);
 
-        let godotExec = cp.exec(
-            `godot --path ${projectPath} --remote-debug ${address}:${port}
-             ${this.buildBreakpointString(breakpoints, projectPath)}`
-        );
+        let execLine = `godot --path ${projectPath} --remote-debug ${address}:${port}`;
+        execLine += this.buildBreakpointString(breakpoints, projectPath);
+        let godotExec = cp.exec(execLine);
         this.godotPid = godotExec.pid;
     }
 

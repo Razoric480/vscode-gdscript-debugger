@@ -48,15 +48,6 @@ export class GodotDebugSession extends LoggingDebugSession {
             );
         });
 
-        this.runtime.on("breakpointValidated", (bp: GodotBreakpoint) => {
-            this.sendEvent(
-                new BreakpointEvent("changed", <DebugProtocol.Breakpoint>{
-                    verified: bp.verified,
-                    id: bp.id
-                })
-            );
-        });
-
         this.runtime.on("terminated", () => {
             this.sendEvent(new TerminatedEvent(false));
         });
@@ -262,7 +253,7 @@ export class GodotDebugSession extends LoggingDebugSession {
             response.body = {
                 breakpoints: bps.map(bp => {
                     return new Breakpoint(
-                        bp.verified,
+                        true,
                         bp.line,
                         1,
                         new Source(

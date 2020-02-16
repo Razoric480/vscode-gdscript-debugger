@@ -3,14 +3,13 @@ import { EventEmitter } from "events";
 import { ServerController } from "./RemoteCommunications/ServerController";
 
 export interface GodotBreakpoint {
-    // #region Properties (4)
+    // #region Properties (3)
 
     file: string;
     id: number;
     line: number;
-    verified: boolean;
 
-    // #endregion Properties (4)
+    // #endregion Properties (3)
 }
 
 export interface GodotStackFrame {
@@ -106,7 +105,6 @@ export class GodotDebugRuntime extends EventEmitter {
 
     public setBreakPoint(pathTo: string, line: number): GodotBreakpoint {
         const bp = {
-            verified: true,
             file: pathTo.replace(/\\/g, "/"),
             line: line,
             id: this.breakpointId++
@@ -120,14 +118,10 @@ export class GodotDebugRuntime extends EventEmitter {
 
         bps.push(bp);
 
-        this.sendEvent("breakpointValidated", bp);
-
-        if (bp.verified) {
-            this.serverController?.setBreakpoint(
-                bp.file.replace(new RegExp(`${this.project}/`), "res://"),
-                line
-            );
-        }
+        this.serverController?.setBreakpoint(
+            bp.file.replace(new RegExp(`${this.project}/`), "res://"),
+            line
+        );
 
         return bp;
     }
