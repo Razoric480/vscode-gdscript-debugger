@@ -2,20 +2,10 @@ import { Command } from "./Command";
 import { VariantParser } from "../VariantParser";
 
 export class CommandBuilder {
-    // #region Properties (2)
-
     private commands = new Map<string, Command>();
     private currentCommand?: Command;
 
-    // #endregion Properties (2)
-
-    // #region Constructors (1)
-
     constructor() {}
-
-    // #endregion Constructors (1)
-
-    // #region Public Methods (3)
 
     public createBufferedCommand(
         command: string,
@@ -58,6 +48,4 @@ export class CommandBuilder {
         let name = command.name;
         this.commands.set(name, command);
     }
-
-    // #endregion Public Methods (3)
 }

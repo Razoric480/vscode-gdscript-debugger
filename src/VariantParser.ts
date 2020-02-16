@@ -40,18 +40,12 @@ enum GDScriptTypes {
 }
 
 interface BufferModel {
-    // #region Properties (3)
-
     buffer: Buffer;
     len: number;
     offset: number;
-
-    // #endregion Properties (3)
 }
 
 export class VariantParser {
-    // #region Public Methods (3)
-
     public decodeVariant(model: BufferModel) {
         let type = this.decodeUInt32(model);
         switch (type & 0xff) {
@@ -189,9 +183,9 @@ export class VariantParser {
         return output;
     }
 
-    // #endregion Public Methods (3)
-
-    // #region Private Methods (44)
+    private clean(value: number) {
+        return +Number.parseFloat(String(value)).toFixed(1);
+    }
 
     private decodeAABB(model: BufferModel) {
         let px = this.decodeFloat(model);
@@ -726,10 +720,4 @@ export class VariantParser {
 
         return size;
     }
-
-    private clean(value: number) {
-        return +Number.parseFloat(String(value)).toFixed(1);
-    }
-
-    // #endregion Private Methods (44)
 }

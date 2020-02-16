@@ -3,29 +3,19 @@ import { EventEmitter } from "events";
 import { ServerController } from "./RemoteCommunications/ServerController";
 
 export interface GodotBreakpoint {
-    // #region Properties (3)
-
     file: string;
     id: number;
     line: number;
-
-    // #endregion Properties (3)
 }
 
 export interface GodotStackFrame {
-    // #region Properties (4)
-
     file: string;
     function: string;
     id: number;
     line: number;
-
-    // #endregion Properties (4)
 }
 
 export class GodotDebugRuntime extends EventEmitter {
-    // #region Properties (6)
-
     private breakpointId = 0;
     private breakpoints = new Map<string, GodotBreakpoint[]>();
     private out: vscode.OutputChannel | undefined;
@@ -33,17 +23,9 @@ export class GodotDebugRuntime extends EventEmitter {
     private project = "";
     private serverController: ServerController | undefined;
 
-    // #endregion Properties (6)
-
-    // #region Constructors (1)
-
     constructor() {
         super();
     }
-
-    // #endregion Constructors (1)
-
-    // #region Public Methods (12)
 
     public break() {
         if (this.paused) {
@@ -81,8 +63,11 @@ export class GodotDebugRuntime extends EventEmitter {
         this.serverController?.getScope(level, callback);
     }
 
-    public inspectObject(objectId: number, inspected: (className: string, properties: any[]) => void) {
-        this.serverController.inspectObject(objectId, inspected);
+    public inspectObject(
+        objectId: number,
+        inspected: (className: string, properties: any[]) => void
+    ) {
+        this.serverController?.inspectObject(objectId, inspected);
     }
 
     public next() {
@@ -156,15 +141,9 @@ export class GodotDebugRuntime extends EventEmitter {
         this.serverController?.stop();
     }
 
-    // #endregion Public Methods (12)
-
-    // #region Private Methods (1)
-
     private sendEvent(event: string, ...args: any[]) {
         setImmediate(_ => {
             this.emit(event, ...args);
         });
     }
-
-    // #endregion Private Methods (1)
 }

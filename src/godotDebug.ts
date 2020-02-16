@@ -3,34 +3,23 @@ import {
     InitializedEvent,
     TerminatedEvent,
     StoppedEvent,
-    BreakpointEvent,
     Thread,
     Source,
     Breakpoint
 } from "vscode-debugadapter";
 import { DebugProtocol } from "vscode-debugprotocol";
-import {
-    GodotDebugRuntime,
-    GodotBreakpoint,
-    GodotStackFrame
-} from "./godotDebugRuntime";
+import { GodotDebugRuntime, GodotStackFrame } from "./godotDebugRuntime";
 const { Subject } = require("await-notify");
 import fs = require("fs");
 import { VariableScope } from "./VariableScope";
 
 interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
-    // #region Properties (3)
-
     address: string;
     port: number;
     project: string;
-
-    // #endregion Properties (3)
 }
 
 export class GodotDebugSession extends LoggingDebugSession {
-    // #region Properties (8)
-
     private static THREAD_ID = 1;
 
     private configurationDone = new Subject();
@@ -40,10 +29,6 @@ export class GodotDebugSession extends LoggingDebugSession {
     private runtime: GodotDebugRuntime;
     private scopeId = 1;
     private scopes = new Map<string, VariableScope[]>();
-
-    // #endregion Properties (8)
-
-    // #region Constructors (1)
 
     public constructor() {
         super();
@@ -64,26 +49,6 @@ export class GodotDebugSession extends LoggingDebugSession {
             this.sendEvent(new TerminatedEvent(false));
         });
     }
-
-    // #endregion Constructors (1)
-
-    // #region Protected Methods (16)
-
-    protected breakpointLocationsRequest(
-        response: DebugProtocol.BreakpointLocationsResponse,
-        args: DebugProtocol.BreakpointLocationsArguments,
-        request?: DebugProtocol.Request
-    ): void {}
-
-    protected cancelRequest(
-        response: DebugProtocol.CancelResponse,
-        args: DebugProtocol.CancelArguments
-    ) {}
-
-    protected completionsRequest(
-        response: DebugProtocol.CompletionsResponse,
-        args: DebugProtocol.CompletionsArguments
-    ): void {}
 
     protected configurationDoneRequest(
         response: DebugProtocol.ConfigurationDoneResponse,
@@ -114,24 +79,36 @@ export class GodotDebugSession extends LoggingDebugSession {
         response.body = response.body || {};
 
         response.body.supportsConfigurationDoneRequest = true;
+
         response.body.supportsEvaluateForHovers = false;
+
         response.body.supportsStepBack = false;
-        response.body.supportsBreakpointLocationsRequest = false;
-        response.body.supportsCancelRequest = false;
-        response.body.supportsCompletionsRequest = false;
-        response.body.supportsConditionalBreakpoints = false;
-        response.body.supportsDataBreakpoints = false;
-        response.body.supportsFunctionBreakpoints = false;
         response.body.supportsGotoTargetsRequest = false;
+
+        response.body.supportsCancelRequest = false;
+
+        response.body.supportsCompletionsRequest = false;
+
+        response.body.supportsFunctionBreakpoints = false;
+        response.body.supportsDataBreakpoints = false;
+        response.body.supportsBreakpointLocationsRequest = false;
+        response.body.supportsConditionalBreakpoints = false;
         response.body.supportsHitConditionalBreakpoints = false;
+
         response.body.supportsLogPoints = false;
+
         response.body.supportsModulesRequest = false;
+
         response.body.supportsReadMemoryRequest = false;
+
         response.body.supportsRestartFrame = false;
         response.body.supportsRestartRequest = false;
+
         response.body.supportsSetExpression = false;
+
         response.body.supportsSetVariable = false;
         response.body.supportsStepInTargetsRequest = false;
+
         response.body.supportsTerminateThreadsRequest = false;
         response.body.supportsTerminateRequest = true;
 
@@ -348,56 +325,17 @@ export class GodotDebugSession extends LoggingDebugSession {
     ) {
         let outId = args.variablesReference;
         let files = Array.from(this.scopes.keys());
-        let isScope = false;
-        let outScope: VariableScope | undefined;
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
 
-            let scopes = this.scopes.get(file);
-            if (scopes) {
-                let index = scopes.findIndex((s, i) => {
-                    return s.id === outId;
-                });
-                if (index !== -1) {
-                    outScope = scopes[index];
-                    isScope = true;
-                    break;
-                } else {
-                    for (let l = 0; l < scopes.length; l++) {
-                        const scope = scopes[l];
-                        let ids = scope.getVariableIds();
-                        for (let k = 0; k < ids.length; k++) {
-                            const id = ids[k];
-                            if (id === outId) {
-                                outScope = scope;
-                                isScope = false;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        let outScopeObject = this.getVariableScope(files, outId);
+        let isScope = outScopeObject.isScope;
+        let outScope = outScopeObject.scope;
 
         if (outScope) {
             if (isScope) {
                 let varIds = outScope.getVariableIds();
                 response.body = {
-                    variables: []
+                    variables: this.parseScope(varIds, outScope)
                 };
-
-                varIds.forEach(id => {
-                    let variable = outScope?.getVariable(id);
-                    if (variable && variable.name.indexOf(".") === -1) {
-                        response.body.variables.push(
-                            this.getVariableResponse(
-                                variable.name,
-                                variable.value,
-                                id
-                            )
-                        );
-                    }
-                });
             } else {
                 let variable = outScope.getVariable(outId);
                 if (variable) {
@@ -466,10 +404,6 @@ export class GodotDebugSession extends LoggingDebugSession {
         }
     }
 
-    // #endregion Protected Methods (16)
-
-    // #region Private Methods (2)
-
     private drillScope(scope: VariableScope, variable: any) {
         let id = scope.getIdFor(variable.name);
         if (id === -1) {
@@ -482,7 +416,7 @@ export class GodotDebugSession extends LoggingDebugSession {
                 let subId = 0;
                 let name = `${variable.name}.${i}`;
                 if (subVars) {
-                    subId = subVars?.findIndex((sv, i) => {
+                    subId = subVars?.findIndex(sv => {
                         return name === sv.name;
                     });
                     if (subId === -1) {
@@ -503,18 +437,15 @@ export class GodotDebugSession extends LoggingDebugSession {
                 variable.value.__type__ === "Object"
             ) {
                 this.inspectCount++;
-                this.runtime.inspectObject(
-                    variable.value.id,
-                    (className, properties) => {
-                        variable.value.__type__ = className;
-                        variable.value.__render__ = () => className;
-                        //TODO: Parse properties into object
-                        this.inspectCount--;
-                        if (this.inspectCount === 0 && this.inspectCallback) {
-                            this.inspectCallback();
-                        }
+                this.runtime.inspectObject(variable.value.id, className => {
+                    variable.value.__type__ = className;
+                    variable.value.__render__ = () => className;
+                    //TODO: Parse properties into object
+                    this.inspectCount--;
+                    if (this.inspectCount === 0 && this.inspectCallback) {
+                        this.inspectCallback();
                     }
-                );
+                });
             }
             for (const property in variable.value) {
                 if (property !== "__type__" && property !== "__render__") {
@@ -522,7 +453,7 @@ export class GodotDebugSession extends LoggingDebugSession {
                     let subId = 0;
                     let name = `${variable.name}.${property}`;
                     if (subVars) {
-                        subId = subVars?.findIndex((sv, i) => {
+                        subId = subVars?.findIndex(sv => {
                             return name === sv.name;
                         });
                         if (subId === -1) {
@@ -609,7 +540,54 @@ export class GodotDebugSession extends LoggingDebugSession {
         };
     }
 
-    // #endregion Private Methods (2)
+    private getVariableScope(files: string[], scopeId: number) {
+        let outScope: VariableScope | undefined;
+        let isScope = false;
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+
+            let scopes = this.scopes.get(file);
+            if (scopes) {
+                let index = scopes.findIndex(s => {
+                    return s.id === scopeId;
+                });
+                if (index !== -1) {
+                    outScope = scopes[index];
+                    isScope = true;
+                    break;
+                } else {
+                    for (let l = 0; l < scopes.length; l++) {
+                        const scope = scopes[l];
+                        let ids = scope.getVariableIds();
+                        for (let k = 0; k < ids.length; k++) {
+                            const id = ids[k];
+                            if (scopeId === id) {
+                                outScope = scope;
+                                isScope = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return { isScope: isScope, scope: outScope };
+    }
+
+    private parseScope(varIds: number[], outScope: VariableScope) {
+        let output: DebugProtocol.Variable[] = [];
+        varIds.forEach(id => {
+            let variable = outScope?.getVariable(id);
+            if (variable && variable.name.indexOf(".") === -1) {
+                output.push(
+                    this.getVariableResponse(variable.name, variable.value, id)
+                );
+            }
+        });
+
+        return output;
+    }
 }
 
 function noExponents(value: number): string {

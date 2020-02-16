@@ -11,13 +11,15 @@ import { CommandBuilder } from "./CommandBuilder";
 import { GodotBreakpoint, GodotStackFrame } from "../godotDebugRuntime";
 
 export class ServerController {
-    // #region Properties (11)
-
     private builder: CommandBuilder | undefined;
     private connection: net.Socket | undefined;
     private emitter: EventEmitter;
     private godotCommands: GodotCommands | undefined;
     private godotPid: number | undefined;
+    private inspectedCallbacks = new Map<
+        number,
+        (className: string, properties: any[]) => void
+    >();
     private outputChannel: vscode.OutputChannel | undefined;
     private parser: VariantParser | undefined;
     private scopeCallbacks: ((
@@ -32,11 +34,6 @@ export class ServerController {
     private server: net.Server | undefined;
     private stackFiles: string[] = [];
     private stackLevel = 0;
-    private inspectedCallbacks = new Map<number, ((className: string, properties: any[]) => void)>();
-
-    // #endregion Properties (11)
-
-    // #region Constructors (1)
 
     constructor(
         eventEmitter: EventEmitter,
@@ -45,10 +42,6 @@ export class ServerController {
         this.emitter = eventEmitter;
         this.outputChannel = outputChannel;
     }
-
-    // #endregion Constructors (1)
-
-    // #region Public Methods (10)
 
     public break() {
         this.godotCommands?.sendBreakCommand();
@@ -77,9 +70,12 @@ export class ServerController {
         }
     }
 
-    public inspectObject(id: number, inspected: (className: string, properties: any[]) => void) {
+    public inspectObject(
+        id: number,
+        inspected: (className: string, properties: any[]) => void
+    ) {
         this.inspectedCallbacks.set(id, inspected);
-        this.godotCommands.sendInspectObjectCommand(id);
+        this.godotCommands?.sendInspectObjectCommand(id);
     }
 
     public next() {
@@ -151,9 +147,9 @@ export class ServerController {
                 let id = params[0];
                 let className = params[1];
                 let properties = params[2];
-                
+
                 let cb = this.inspectedCallbacks.get(id);
-                if(cb) {
+                if (cb) {
                     cb(className, properties);
                     this.inspectedCallbacks.delete(id);
                 }
@@ -261,10 +257,6 @@ export class ServerController {
         this.sendEvent("terminated");
     }
 
-    // #endregion Public Methods (10)
-
-    // #region Private Methods (4)
-
     private buildBreakpointString(
         breakpoints: GodotBreakpoint[],
         project: string
@@ -318,6 +310,4 @@ export class ServerController {
         });
         this.sendEvent("stopOnBreakpoint", stackFrames);
     }
-
-    // #endregion Private Methods (4)
 }

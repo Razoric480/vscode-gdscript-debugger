@@ -3,17 +3,11 @@ import { VariantParser } from "../VariantParser";
 import net = require("net");
 
 export class GodotCommands {
-    // #region Properties (5)
-
     private builder: CommandBuilder;
     private canWrite = false;
     private commandBuffer: Buffer[] = [];
     private connection: net.Socket | undefined;
     private parser: VariantParser;
-
-    // #endregion Properties (5)
-
-    // #region Constructors (1)
 
     constructor(
         builder: CommandBuilder,
@@ -24,10 +18,6 @@ export class GodotCommands {
         this.parser = parser;
         this.connection = connection;
     }
-
-    // #endregion Constructors (1)
-
-    // #region Public Methods (12)
 
     public sendBreakCommand() {
         let buffer = this.builder.createBufferedCommand("break", this.parser);
@@ -111,10 +101,6 @@ export class GodotCommands {
         this.canWrite = true;
     }
 
-    // #endregion Public Methods (12)
-
-    // #region Private Methods (3)
-
     private addAndSend(buffer: Buffer) {
         this.commandBuffer.push(buffer);
         this.sendBuffer();
@@ -140,6 +126,4 @@ export class GodotCommands {
             );
         }
     }
-
-    // #endregion Private Methods (3)
 }

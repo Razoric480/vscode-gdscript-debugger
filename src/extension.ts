@@ -18,8 +18,6 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() {}
 
 class GodotConfigurationProvider implements vscode.DebugConfigurationProvider {
-    // #region Public Methods (1)
-
     public resolveDebugConfiguration(
         folder: vscode.WorkspaceFolder | undefined,
         config: vscode.DebugConfiguration,
@@ -31,18 +29,10 @@ class GodotConfigurationProvider implements vscode.DebugConfigurationProvider {
 
         return config;
     }
-
-    // #endregion Public Methods (1)
 }
 
 class GodotDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
-    // #region Properties (1)
-
     private session: GodotDebugSession | undefined;
-
-    // #endregion Properties (1)
-
-    // #region Public Methods (2)
 
     public createDebugAdapterDescriptor(
         session: vscode.DebugSession
@@ -54,6 +44,4 @@ class GodotDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
     public dispose() {
         this.session = undefined;
     }
-
-    // #endregion Public Methods (2)
 }

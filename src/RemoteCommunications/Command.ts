@@ -1,6 +1,4 @@
 export class Command {
-    // #region Properties (5)
-
     private callback?: (
         parameters: Array<boolean | number | string | {} | [] | undefined>
     ) => void | undefined;
@@ -12,10 +10,6 @@ export class Command {
 
     public name: string;
 
-    // #endregion Properties (5)
-
-    // #region Constructors (1)
-
     constructor(
         name: string,
         parametersFulfilled?: (parameters: Array<any>) => void | undefined,
@@ -25,10 +19,6 @@ export class Command {
         this.callback = parametersFulfilled;
         this.paramCountCallback = modifyParamCount;
     }
-
-    // #endregion Constructors (1)
-
-    // #region Public Methods (2)
 
     public appendParameter(
         parameter: boolean | number | string | {} | [] | undefined
@@ -57,15 +47,9 @@ export class Command {
         }
     }
 
-    // #endregion Public Methods (2)
-
-    // #region Protected Methods (1)
-
     protected getParamCount() {
         return this.paramCountCallback
             ? this.paramCountCallback(this.paramCount)
             : this.paramCount;
     }
-
-    // #endregion Protected Methods (1)
 }

@@ -1,22 +1,12 @@
 export class VariableScope {
-    // #region Properties (3)
-
     private subVariables = new Map<number, { name: string; value: any }[]>();
     private variables = new Map<number, { name: string; value: any }>();
 
     public readonly id: number;
 
-    // #endregion Properties (3)
-
-    // #region Constructors (1)
-
     constructor(id: number) {
         this.id = id;
     }
-
-    // #endregion Constructors (1)
-
-    // #region Public Methods (7)
 
     public getIdFor(name: string) {
         let ids = Array.from(this.variables.keys());
@@ -71,6 +61,4 @@ export class VariableScope {
         let variable = { name: name, value: value };
         this.variables.set(id, variable);
     }
-
-    // #endregion Public Methods (7)
 }
