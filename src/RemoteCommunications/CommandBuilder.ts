@@ -44,7 +44,7 @@ export class CommandBuilder {
                 }
             } else {
                 let data = dataset.shift();
-                let command = this.commands.get(dataset.shift());
+                let command = this.commands.get(data);
                 if (command) {
                     this.currentCommand = command;
                 } else {

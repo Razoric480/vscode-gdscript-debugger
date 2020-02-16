@@ -309,7 +309,7 @@ export class GodotDebugSession extends LoggingDebugSession {
         response: DebugProtocol.StepInResponse,
         args: DebugProtocol.StepInArguments
     ) {
-        this.runtime.next();
+        this.runtime.step();
         this.sendResponse(response);
     }
 
