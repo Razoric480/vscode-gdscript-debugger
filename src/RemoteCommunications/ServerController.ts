@@ -32,6 +32,7 @@ export class ServerController {
     private server: net.Server | undefined;
     private stackFiles: string[] = [];
     private stackLevel = 0;
+    private inspectedCallbacks = new Map<number, ((className: string, properties: any[]) => void)>();
 
     // #endregion Properties (11)
 
@@ -47,7 +48,7 @@ export class ServerController {
 
     // #endregion Constructors (1)
 
-    // #region Public Methods (9)
+    // #region Public Methods (10)
 
     public break() {
         this.godotCommands?.sendBreakCommand();
@@ -74,6 +75,11 @@ export class ServerController {
         if (callback) {
             this.scopeCallbacks.push(callback);
         }
+    }
+
+    public inspectObject(id: number, inspected: (className: string, properties: any[]) => void) {
+        this.inspectedCallbacks.set(id, inspected);
+        this.godotCommands.sendInspectObjectCommand(id);
     }
 
     public next() {
@@ -141,7 +147,17 @@ export class ServerController {
         );
 
         this.builder.registerCommand(
-            new commands.Command("message:inspect_object", params => {})
+            new commands.Command("message:inspect_object", params => {
+                let id = params[0];
+                let className = params[1];
+                let properties = params[2];
+                
+                let cb = this.inspectedCallbacks.get(id);
+                if(cb) {
+                    cb(className, properties);
+                    this.inspectedCallbacks.delete(id);
+                }
+            })
         );
 
         this.builder.registerCommand(
@@ -245,7 +261,7 @@ export class ServerController {
         this.sendEvent("terminated");
     }
 
-    // #endregion Public Methods (9)
+    // #endregion Public Methods (10)
 
     // #region Private Methods (4)
 

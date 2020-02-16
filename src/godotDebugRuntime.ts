@@ -43,7 +43,7 @@ export class GodotDebugRuntime extends EventEmitter {
 
     // #endregion Constructors (1)
 
-    // #region Public Methods (11)
+    // #region Public Methods (12)
 
     public break() {
         if (this.paused) {
@@ -79,6 +79,10 @@ export class GodotDebugRuntime extends EventEmitter {
         ) => void
     ) {
         this.serverController?.getScope(level, callback);
+    }
+
+    public inspectObject(objectId: number, inspected: (className: string, properties: any[]) => void) {
+        this.serverController.inspectObject(objectId, inspected);
     }
 
     public next() {
@@ -152,7 +156,7 @@ export class GodotDebugRuntime extends EventEmitter {
         this.serverController?.stop();
     }
 
-    // #endregion Public Methods (11)
+    // #endregion Public Methods (12)
 
     // #region Private Methods (1)
 

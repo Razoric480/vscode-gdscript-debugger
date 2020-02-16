@@ -19,19 +19,31 @@ import fs = require("fs");
 import { VariableScope } from "./VariableScope";
 
 interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
+    // #region Properties (3)
+
     address: string;
     port: number;
     project: string;
+
+    // #endregion Properties (3)
 }
 
 export class GodotDebugSession extends LoggingDebugSession {
+    // #region Properties (8)
+
     private static THREAD_ID = 1;
 
     private configurationDone = new Subject();
+    private inspectCallback: (() => void) | undefined;
+    private inspectCount = 0;
     private lastFrames: GodotStackFrame[] = [];
     private runtime: GodotDebugRuntime;
     private scopeId = 1;
     private scopes = new Map<string, VariableScope[]>();
+
+    // #endregion Properties (8)
+
+    // #region Constructors (1)
 
     public constructor() {
         super();
@@ -52,6 +64,10 @@ export class GodotDebugSession extends LoggingDebugSession {
             this.sendEvent(new TerminatedEvent(false));
         });
     }
+
+    // #endregion Constructors (1)
+
+    // #region Protected Methods (16)
 
     protected breakpointLocationsRequest(
         response: DebugProtocol.BreakpointLocationsResponse,
@@ -221,7 +237,13 @@ export class GodotDebugSession extends LoggingDebugSession {
                     scopes: [outLocalScope, outMemberScope, outGlobalScope]
                 };
 
-                this.sendResponse(response);
+                if (this.inspectCount === 0) {
+                    this.sendResponse(response);
+                } else {
+                    this.inspectCallback = () => {
+                        this.sendResponse(response);
+                    };
+                }
             }
         );
     }
@@ -444,6 +466,10 @@ export class GodotDebugSession extends LoggingDebugSession {
         }
     }
 
+    // #endregion Protected Methods (16)
+
+    // #region Private Methods (2)
+
     private drillScope(scope: VariableScope, variable: any) {
         let id = scope.getIdFor(variable.name);
         if (id === -1) {
@@ -472,6 +498,24 @@ export class GodotDebugSession extends LoggingDebugSession {
                 });
             }
         } else if (typeof variable.value === "object") {
+            if (
+                variable.value.__type__ &&
+                variable.value.__type__ === "Object"
+            ) {
+                this.inspectCount++;
+                this.runtime.inspectObject(
+                    variable.value.id,
+                    (className, properties) => {
+                        variable.value.__type__ = className;
+                        variable.value.__render__ = () => className;
+                        //TODO: Parse properties into object
+                        this.inspectCount--;
+                        if (this.inspectCount === 0 && this.inspectCallback) {
+                            this.inspectCallback();
+                        }
+                    }
+                );
+            }
             for (const property in variable.value) {
                 if (property !== "__type__" && property !== "__render__") {
                     let subVars = scope.getSubVariablesFor(id);
@@ -564,6 +608,8 @@ export class GodotDebugSession extends LoggingDebugSession {
             type: type
         };
     }
+
+    // #endregion Private Methods (2)
 }
 
 function noExponents(value: number): string {
